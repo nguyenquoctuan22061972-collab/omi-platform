@@ -1,19 +1,70 @@
 {
-  "name": "WF001 - Lead Ingestion (PLACEHOLDER)",
-  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.1-9.2" },
+  "name": "WF001 - Lead Ingestion",
   "nodes": [
-    { "name": "Webhook", "type": "n8n-nodes-base.webhook", "position": [0, 0],
-      "parameters": { "httpMethod": "POST", "path": "crm/lead" }, "disabled": true },
-    { "name": "Normalize", "type": "n8n-nodes-base.function", "position": [220, 0],
-      "parameters": { "functionCode": "// TODO: map payload -> {name,phone,email,channel,message}" }, "disabled": true },
-    { "name": "POST /contacts", "type": "n8n-nodes-base.httpRequest", "position": [440, 0],
-      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/contacts" }, "disabled": true },
-    { "name": "POST /messages", "type": "n8n-nodes-base.httpRequest", "position": [660, 0],
-      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/messages" }, "disabled": true }
+    {
+      "parameters": { "httpMethod": "POST", "path": "crm/lead", "responseMode": "responseNode" },
+      "id": "wf001-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "crm-lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chuẩn hoá payload đa kênh -> {name,phone,email,channel,message}\nconst b = $input.first().json.body || $input.first().json;\nreturn [{ json: {\n  name: b.name || '',\n  phone: b.phone || '',\n  email: b.email || '',\n  channel: b.channel || 'api_webhook',\n  message: b.message || ''\n}}];"
+      },
+      "id": "wf001-normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_BASE}}/contacts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.name, phone: $json.phone, email: $json.email, source: $json.channel }) }}",
+        "options": {}
+      },
+      "id": "wf001-create-contact",
+      "name": "Create Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_BASE}}/messages",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact_id: $json.id, channel: $('Normalize').item.json.channel, message: $('Normalize').item.json.message }) }}",
+        "options": {}
+      },
+      "id": "wf001-add-message",
+      "name": "Add Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ ok: true }) }}" },
+      "id": "wf001-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
   ],
   "connections": {
     "Webhook": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
-    "Normalize": { "main": [[{ "node": "POST /contacts", "type": "main", "index": 0 }]] },
-    "POST /contacts": { "main": [[{ "node": "POST /messages", "type": "main", "index": 0 }]] }
-  }
+    "Normalize": { "main": [[{ "node": "Create Contact", "type": "main", "index": 0 }]] },
+    "Create Contact": { "main": [[{ "node": "Add Message", "type": "main", "index": 0 }]] },
+    "Add Message": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.1-9.2", "credentials_required": false, "note": "Import vào n8n; đặt env CRM_BASE." }
 }
