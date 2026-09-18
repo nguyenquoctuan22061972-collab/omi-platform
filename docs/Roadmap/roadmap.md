@@ -23,10 +23,14 @@ JWT+refresh+bcrypt, RBAC 4 roles, audit log. 19 test PASS. **Done, đã push.**
 Workflow JSON importable WF001/WF002/WF050 + validator 5 test PASS. **Done (skeleton),
 đã push.** Còn lại (ngoài scope B): credential + deploy + endpoint KPI.
 
+### ✅ Giai đoạn 4 — Frontend Dashboard (PRD-004) + CR-001
+- CR-001: CRM Core `GET /dashboard/kpi` (backward compatible, 17 test PASS) → **gỡ gap WF050**.
+- PRD-004: Dashboard vanilla JS (KPI + pipeline chart), responsive, 10/10 TC PASS.
+- **Done, đã push.**
+
 ### ⏭️ Tiếp theo (chờ PRD/duyệt)
-- Duyệt PRD-003 + cung cấp credential/n8n để bật automation "thật" (phương án A).
-- **CR CRM Core:** expose `GET /dashboard/kpi` (gap PRD-003 §11).
-- **PRD-004:** Frontend (5 màn hình theo wireframe §8).
+- Bật automation "thật" (phương án A): credential/n8n + bật node disabled (WF050 đã sẵn sàng nhờ CR-001).
+- Hoàn thiện màn Contacts/Inbox/Pipeline (skeleton → đầy đủ).
 - **PRD-005:** Deployment (ASGI + Postgres + rate-limit + CI/CD).
 
 ### ⏭️ Giai đoạn 4 — Vận hành

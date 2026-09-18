@@ -16,6 +16,8 @@ Bản đồ chức năng đã có (chống trùng lặp — luật #4). **Tra fi
 | JWT + Refresh + bcrypt | auth | `apps/auth-rbac/src/auth/*` | PRD-002 §3 |
 | RBAC middleware (4 roles) | rbac | `apps/auth-rbac/src/rbac/*` | PRD-002 §3-4 |
 | Audit log | auth-audit | `apps/auth-rbac/src/auth/audit.py` | PRD-002 §3 |
+| KPI endpoint HTTP | crm-api | `apps/crm-core/src/crm/api.py` GET /dashboard/kpi | CR-001 |
+| Frontend Dashboard (KPI UI) | dashboard | `apps/dashboard/*` | PRD-004 |
 
 ## Importable (PRD-003 DRAFT — JSON import được, chưa nối credential)
 | Capability | Vị trí | Điều kiện bật "thật" |
