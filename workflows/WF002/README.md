@@ -1,19 +1,16 @@
-# WF002 — AI Auto-Tag & Sales Routing (n8n) · PLACEHOLDER
+# WF002 — AI Auto-Tag & Sales Routing (n8n)
 
-**Trạng thái:** 🟡 Placeholder — chưa nối credential/deploy.
-**Map PRD-001 §9:** bước 3 (AI gắn tag) + bước 4 (Sales xử lý).
+**Trạng thái:** 🟢 Importable (PRD-003 DRAFT) — chưa nối credential.
+**Map PRD-001 §9:** 9.3 AI gắn tag + 9.4 Sales xử lý.
 
-## Luồng n8n (dự kiến)
-```
-[Trigger: sau WF001 / new conversation]
-   → [AI node hoặc Function: suggest tags]   (điểm cắm AI thật; MVP dùng rule-based)
-   → [HTTP Request: cập nhật tags contact]
-   → [Switch theo tag/stage → phân công Sales]
-   → [Notify: Slack/Email cho Sales]
-```
+## Import
+n8n UI → *Import from File* → `workflow.json`. Đặt `CRM_BASE`.
 
-## Ghi chú
-- Logic tag tham chiếu `apps/crm-core/src/crm/tagging.py` (rule-based stub).
-- Phân quyền/định tuyến Sales cần RBAC (Risk §11) → giai đoạn sau.
+## Luồng
+`Webhook(crm/new-conversation)` → `Suggest Tags(Code, mirror tagging.py)` →
+`POST /contacts (merge tags)` → `Switch(route theo tag)` → `Assign(NoOp, cắm notify)`.
 
-Xem `workflow.json` (skeleton placeholder).
+## Cần gắn khi deploy
+- `CRM_BASE`.
+- Node `Assign`: nối Slack/Email/telegram để notify Sales/CSKH.
+- (Tuỳ chọn) thay `Suggest Tags` bằng AI node thật.

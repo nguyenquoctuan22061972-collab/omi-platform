@@ -1,19 +1,75 @@
 {
-  "name": "WF002 - AI Auto-Tag & Sales Routing (PLACEHOLDER)",
-  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.3-9.4" },
+  "name": "WF002 - AI Auto-Tag & Sales Routing",
   "nodes": [
-    { "name": "Trigger", "type": "n8n-nodes-base.webhook", "position": [0, 0],
-      "parameters": { "httpMethod": "POST", "path": "crm/new-conversation" }, "disabled": true },
-    { "name": "Suggest Tags", "type": "n8n-nodes-base.function", "position": [220, 0],
-      "parameters": { "functionCode": "// TODO: rule-based/AI tagging (ref tagging.py)" }, "disabled": true },
-    { "name": "Update Tags", "type": "n8n-nodes-base.httpRequest", "position": [440, 0],
-      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/contacts" }, "disabled": true },
-    { "name": "Route to Sales", "type": "n8n-nodes-base.switch", "position": [660, 0],
-      "parameters": {}, "disabled": true }
+    {
+      "parameters": { "httpMethod": "POST", "path": "crm/new-conversation", "responseMode": "onReceived" },
+      "id": "wf002-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "crm-new-conversation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rule-based tag (mirror apps/crm-core/src/crm/tagging.py). Điểm cắm AI thật.\nconst j = $input.first().json.body || $input.first().json;\nconst msg = (j.message || '').toLowerCase();\nconst kw = { 'giá':'pricing','price':'pricing','mua':'intent-buy','order':'intent-buy','đặt':'intent-buy','lỗi':'support','support':'support','khiếu nại':'complaint' };\nconst tags = [];\nif (j.channel) tags.push('channel:' + String(j.channel).toLowerCase().replace(/ /g,'-'));\nfor (const k in kw) if (msg.includes(k) && !tags.includes(kw[k])) tags.push(kw[k]);\nreturn [{ json: { contact_id: j.contact_id || '', phone: j.phone || '', email: j.email || '', tags } }];"
+      },
+      "id": "wf002-suggest-tags",
+      "name": "Suggest Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_BASE}}/contacts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.phone, email: $json.email, tags: $json.tags }) }}",
+        "options": {}
+      },
+      "id": "wf002-update-tags",
+      "name": "Update Tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "intent-buy", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "sales" },
+            { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "support", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "cskh" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "wf002-route",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {},
+      "id": "wf002-assign",
+      "name": "Assign (notify Sales/CSKH)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
   ],
   "connections": {
     "Trigger": { "main": [[{ "node": "Suggest Tags", "type": "main", "index": 0 }]] },
     "Suggest Tags": { "main": [[{ "node": "Update Tags", "type": "main", "index": 0 }]] },
-    "Update Tags": { "main": [[{ "node": "Route to Sales", "type": "main", "index": 0 }]] }
-  }
+    "Update Tags": { "main": [[{ "node": "Route", "type": "main", "index": 0 }]] },
+    "Route": { "main": [
+      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }],
+      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }],
+      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }]
+    ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.3-9.4", "credentials_required": false, "note": "Import; đặt env CRM_BASE. Node Assign là điểm cắm notify (Slack/Email)." }
 }
