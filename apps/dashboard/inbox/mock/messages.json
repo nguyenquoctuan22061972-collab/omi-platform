@@ -1,0 +1,7 @@
+[
+  { "id": "m1", "channel": "telegram", "from": "Nguyễn An", "text": "Xin chào, tư vấn giúp em", "ts": "2026-09-18T10:01:00Z" },
+  { "id": "m2", "channel": "email", "from": "binh@example.com", "text": "Báo giá gói Pro?", "ts": "2026-09-18T10:05:00Z" },
+  { "id": "m3", "channel": "zalo_oa", "from": "Lê Chi", "text": "Còn hàng không ạ?", "ts": "2026-09-18T10:09:00Z" },
+  { "id": "m4", "channel": "facebook_messenger", "from": "Phạm Dũng", "text": "Mình muốn đặt 2 sản phẩm", "ts": "2026-09-18T10:12:00Z" },
+  { "id": "m5", "channel": "telegram", "from": "Hồ Giang", "text": "Lỗi thanh toán", "ts": "2026-09-18T10:15:00Z" }
+]
