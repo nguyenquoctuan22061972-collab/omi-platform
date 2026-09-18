@@ -40,6 +40,10 @@ jobs:
         working-directory: deploy
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Integration adapters (PRD-006 D)
+        working-directory: libs/integrations
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   build-images:
     needs: test
     runs-on: ubuntu-latest
