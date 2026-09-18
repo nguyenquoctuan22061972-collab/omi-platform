@@ -1,19 +1,18 @@
-# WF050 — Dashboard KPI Sync (n8n) · PLACEHOLDER
+# WF050 — Dashboard KPI Sync (n8n)
 
-**Trạng thái:** 🟡 Placeholder — chưa nối credential/deploy.
-**Map PRD-001 §9:** bước 5 (Dashboard cập nhật).
+**Trạng thái:** 🟢 Importable (PRD-003 DRAFT) — chưa nối credential.
+**Map PRD-001 §9:** 9.5 Dashboard cập nhật.
 
-## Luồng n8n (dự kiến)
-```
-[Cron / hoặc realtime trigger]
-   → [HTTP Request: đọc KPI từ CRM Core]   (dashboard.kpi — realtime §10)
-   → [Function: format số liệu]
-   → [Cập nhật Dashboard / gửi báo cáo định kỳ]
-```
+## Import
+n8n UI → *Import from File* → `workflow.json`. Đặt `CRM_BASE`.
 
-## Ghi chú
-- KPI đọc realtime từ DB (không cache) — bám PRD §10.
-- Nếu chỉ cần realtime trên UI thì dashboard gọi trực tiếp CRM Core; WF050 dùng cho
-  báo cáo định kỳ/tổng hợp ngoài giờ.
+## Luồng
+`Schedule(cron)` → `Read KPI (GET /dashboard/kpi)` → `Format(Code)` → `Publish(NoOp)`.
 
-Xem `workflow.json` (skeleton placeholder).
+## ⚠️ Gap phải xử lý trước khi bật (PRD-003 §11)
+CRM Core **chưa có** endpoint `GET /dashboard/kpi` (PRD-001 §6 chỉ có 5 endpoint;
+`dashboard.kpi` mới là hàm module). Cần 1 CR/PRD bổ sung endpoint này rồi mới bật WF050.
+
+## Cần gắn khi deploy
+- `CRM_BASE`.
+- Node `Publish`: nối kênh gửi báo cáo (Email/Slack/Sheet).

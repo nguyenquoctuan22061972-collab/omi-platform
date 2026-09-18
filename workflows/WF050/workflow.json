@@ -1,19 +1,51 @@
 {
-  "name": "WF050 - Dashboard KPI Sync (PLACEHOLDER)",
-  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.5" },
+  "name": "WF050 - Dashboard KPI Sync",
   "nodes": [
-    { "name": "Cron", "type": "n8n-nodes-base.cron", "position": [0, 0],
-      "parameters": {}, "disabled": true },
-    { "name": "Read KPI", "type": "n8n-nodes-base.httpRequest", "position": [220, 0],
-      "parameters": { "method": "GET", "url": "={{$env.CRM_BASE}}/dashboard/kpi" }, "disabled": true },
-    { "name": "Format", "type": "n8n-nodes-base.function", "position": [440, 0],
-      "parameters": { "functionCode": "// TODO: format KPI cho báo cáo" }, "disabled": true },
-    { "name": "Publish Report", "type": "n8n-nodes-base.noOp", "position": [660, 0],
-      "parameters": {}, "disabled": true }
+    {
+      "parameters": { "rule": { "interval": [ { "field": "hours", "hoursInterval": 1 } ] } },
+      "id": "wf050-schedule",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.CRM_BASE}}/dashboard/kpi",
+        "options": {}
+      },
+      "id": "wf050-read-kpi",
+      "name": "Read KPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "notes": "GAP: endpoint /dashboard/kpi chưa có ở CRM Core (PRD-003 §11). Cần bổ sung trước khi bật."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format KPI cho báo cáo định kỳ.\nconst k = $input.first().json;\nreturn [{ json: { report_at: new Date().toISOString(), kpi: k } }];"
+      },
+      "id": "wf050-format",
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {},
+      "id": "wf050-publish",
+      "name": "Publish Report",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
   ],
   "connections": {
-    "Cron": { "main": [[{ "node": "Read KPI", "type": "main", "index": 0 }]] },
+    "Schedule": { "main": [[{ "node": "Read KPI", "type": "main", "index": 0 }]] },
     "Read KPI": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
     "Format": { "main": [[{ "node": "Publish Report", "type": "main", "index": 0 }]] }
-  }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.5", "credentials_required": false, "gap": "CRM Core cần expose GET /dashboard/kpi (PRD-003 §11)." }
 }
