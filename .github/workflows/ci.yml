@@ -44,6 +44,22 @@ jobs:
         working-directory: libs/integrations
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Runtime Health (PRD-008 A)
+        working-directory: apps/runtime-health
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — libs/logging (PRD-008 B)
+        working-directory: libs/logging
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — libs/audit (PRD-008 C)
+        working-directory: libs/audit
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — libs/metrics (PRD-008 D)
+        working-directory: libs/metrics
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   build-images:
     needs: test
     runs-on: ubuntu-latest
