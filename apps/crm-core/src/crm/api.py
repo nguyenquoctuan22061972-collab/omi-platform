@@ -1,11 +1,12 @@
 """Module api (PRD-001 §6) — HTTP router nối các module.
 
-Endpoints (bám đúng PRD, không thêm):
+Endpoints:
   POST /contacts
   GET  /contacts/{id}
   POST /messages
   GET  /conversations?contact_id=
   POST /pipeline/update
+  GET  /dashboard/kpi            (thêm bởi CR-001 — backward compatible)
 
 Dùng http.server stdlib. Mỗi tiến trình 1 kết nối SQLite (đường dẫn cấu hình qua
 CRM_DB_PATH, mặc định file cục bộ).
@@ -22,6 +23,7 @@ from . import db as _db
 from . import contacts as _contacts
 from . import conversations as _conversations
 from . import pipeline as _pipeline
+from . import dashboard as _dashboard
 
 
 _CONTACT_ID_RE = re.compile(r"^/contacts/([^/]+)$")
@@ -64,6 +66,8 @@ def make_handler(conn):
                 qs = parse_qs(parsed.query)
                 cid = (qs.get("contact_id") or [None])[0]
                 return self._send(200, _conversations.list_conversations(conn, cid))
+            if path == "/dashboard/kpi":  # CR-001
+                return self._send(200, _dashboard.kpi(conn))
             return self._send(404, {"error": "unknown route"})
 
         def do_POST(self):

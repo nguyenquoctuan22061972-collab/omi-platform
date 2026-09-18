@@ -9,9 +9,9 @@ n8n UI → *Import from File* → `workflow.json`. Đặt `CRM_BASE`.
 ## Luồng
 `Schedule(cron)` → `Read KPI (GET /dashboard/kpi)` → `Format(Code)` → `Publish(NoOp)`.
 
-## ⚠️ Gap phải xử lý trước khi bật (PRD-003 §11)
-CRM Core **chưa có** endpoint `GET /dashboard/kpi` (PRD-001 §6 chỉ có 5 endpoint;
-`dashboard.kpi` mới là hàm module). Cần 1 CR/PRD bổ sung endpoint này rồi mới bật WF050.
+## ✅ Gap đã xử lý (CR-001)
+CRM Core đã có `GET /dashboard/kpi` (CR-001, backward compatible). WF050 sẵn sàng bật
+sau khi gắn `CRM_BASE` + SMTP credential.
 
 ## Node disabled (cần secret)
 - `Send Report (Email)` — cần SMTP credential + `REPORT_FROM_EMAIL`/`REPORT_TO_EMAIL`.

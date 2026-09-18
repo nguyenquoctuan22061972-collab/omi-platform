@@ -69,6 +69,19 @@ Lỗi `400`: stage không hợp lệ, hoặc contact không tồn tại.
 
 ---
 
+## GET /dashboard/kpi  *(CR-001 — backward compatible)*
+KPI realtime. Không tham số.
+
+Response `200`:
+```json
+{ "total_contacts": 0, "total_messages": 0,
+  "pipeline_by_stage": {"lead":0,"contacted":0,"qualified":0,"proposal":0,"won":0,"lost":0},
+  "win_rate": 0.0 }
+```
+Xem `CR-001-kpi-endpoint.md` + `openapi-crm-core.yaml`.
+
+---
+
 ## Bảng mã trạng thái
 | Tình huống | Mã |
 |---|---|
