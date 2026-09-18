@@ -1,0 +1,19 @@
+{
+  "name": "WF050 - Dashboard KPI Sync (PLACEHOLDER)",
+  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.5" },
+  "nodes": [
+    { "name": "Cron", "type": "n8n-nodes-base.cron", "position": [0, 0],
+      "parameters": {}, "disabled": true },
+    { "name": "Read KPI", "type": "n8n-nodes-base.httpRequest", "position": [220, 0],
+      "parameters": { "method": "GET", "url": "={{$env.CRM_BASE}}/dashboard/kpi" }, "disabled": true },
+    { "name": "Format", "type": "n8n-nodes-base.function", "position": [440, 0],
+      "parameters": { "functionCode": "// TODO: format KPI cho báo cáo" }, "disabled": true },
+    { "name": "Publish Report", "type": "n8n-nodes-base.noOp", "position": [660, 0],
+      "parameters": {}, "disabled": true }
+  ],
+  "connections": {
+    "Cron": { "main": [[{ "node": "Read KPI", "type": "main", "index": 0 }]] },
+    "Read KPI": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Publish Report", "type": "main", "index": 0 }]] }
+  }
+}

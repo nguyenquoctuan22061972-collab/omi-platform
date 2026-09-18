@@ -1,0 +1,19 @@
+{
+  "name": "WF001 - Lead Ingestion (PLACEHOLDER)",
+  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.1-9.2" },
+  "nodes": [
+    { "name": "Webhook", "type": "n8n-nodes-base.webhook", "position": [0, 0],
+      "parameters": { "httpMethod": "POST", "path": "crm/lead" }, "disabled": true },
+    { "name": "Normalize", "type": "n8n-nodes-base.function", "position": [220, 0],
+      "parameters": { "functionCode": "// TODO: map payload -> {name,phone,email,channel,message}" }, "disabled": true },
+    { "name": "POST /contacts", "type": "n8n-nodes-base.httpRequest", "position": [440, 0],
+      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/contacts" }, "disabled": true },
+    { "name": "POST /messages", "type": "n8n-nodes-base.httpRequest", "position": [660, 0],
+      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/messages" }, "disabled": true }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "POST /contacts", "type": "main", "index": 0 }]] },
+    "POST /contacts": { "main": [[{ "node": "POST /messages", "type": "main", "index": 0 }]] }
+  }
+}

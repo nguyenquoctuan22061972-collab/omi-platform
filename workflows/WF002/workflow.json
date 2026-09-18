@@ -1,0 +1,19 @@
+{
+  "name": "WF002 - AI Auto-Tag & Sales Routing (PLACEHOLDER)",
+  "meta": { "placeholder": true, "prd": "PRD-001", "maps": "§9.3-9.4" },
+  "nodes": [
+    { "name": "Trigger", "type": "n8n-nodes-base.webhook", "position": [0, 0],
+      "parameters": { "httpMethod": "POST", "path": "crm/new-conversation" }, "disabled": true },
+    { "name": "Suggest Tags", "type": "n8n-nodes-base.function", "position": [220, 0],
+      "parameters": { "functionCode": "// TODO: rule-based/AI tagging (ref tagging.py)" }, "disabled": true },
+    { "name": "Update Tags", "type": "n8n-nodes-base.httpRequest", "position": [440, 0],
+      "parameters": { "method": "POST", "url": "={{$env.CRM_BASE}}/contacts" }, "disabled": true },
+    { "name": "Route to Sales", "type": "n8n-nodes-base.switch", "position": [660, 0],
+      "parameters": {}, "disabled": true }
+  ],
+  "connections": {
+    "Trigger": { "main": [[{ "node": "Suggest Tags", "type": "main", "index": 0 }]] },
+    "Suggest Tags": { "main": [[{ "node": "Update Tags", "type": "main", "index": 0 }]] },
+    "Update Tags": { "main": [[{ "node": "Route to Sales", "type": "main", "index": 0 }]] }
+  }
+}
