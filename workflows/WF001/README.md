@@ -10,6 +10,10 @@ n8n UI → *Import from File* → `workflow.json`. Đặt biến môi trường 
 ## Luồng
 `Webhook(crm/lead)` → `Normalize(Code)` → `POST /contacts` → `POST /messages` → `Respond`.
 
+## Node disabled (cần secret)
+- `Verify Signature` — cần channel signing key. Bật sau khi gắn.
+
 ## Cần gắn khi deploy (ngoài scope B)
-- `CRM_BASE`.
-- Credential kênh nếu nhận trực tiếp từ FB/Zalo/Telegram (thay/nối trước Webhook).
+- `CRM_BASE` (xem `../.env.example`).
+- Credential kênh nếu nhận trực tiếp từ FB/Zalo/Telegram.
+- Retry đã cấu hình sẵn (maxTries=3, backoff). Xem runbook.

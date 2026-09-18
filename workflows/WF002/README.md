@@ -10,7 +10,9 @@ n8n UI → *Import from File* → `workflow.json`. Đặt `CRM_BASE`.
 `Webhook(crm/new-conversation)` → `Suggest Tags(Code, mirror tagging.py)` →
 `POST /contacts (merge tags)` → `Switch(route theo tag)` → `Assign(NoOp, cắm notify)`.
 
+## Node disabled (cần secret)
+- `Notify Sales (Slack)` — cần Slack credential + `SALES_SLACK_CHANNEL`. Bật sau khi gắn.
+
 ## Cần gắn khi deploy
-- `CRM_BASE`.
-- Node `Assign`: nối Slack/Email/telegram để notify Sales/CSKH.
+- `CRM_BASE`, `SALES_SLACK_CHANNEL` (xem `../.env.example`).
 - (Tuỳ chọn) thay `Suggest Tags` bằng AI node thật.

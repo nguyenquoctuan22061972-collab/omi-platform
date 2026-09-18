@@ -7,18 +7,18 @@
       "name": "Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300],
+      "position": [220, 300],
       "webhookId": "crm-new-conversation"
     },
     {
       "parameters": {
-        "jsCode": "// Rule-based tag (mirror apps/crm-core/src/crm/tagging.py). Điểm cắm AI thật.\nconst j = $input.first().json.body || $input.first().json;\nconst msg = (j.message || '').toLowerCase();\nconst kw = { 'giá':'pricing','price':'pricing','mua':'intent-buy','order':'intent-buy','đặt':'intent-buy','lỗi':'support','support':'support','khiếu nại':'complaint' };\nconst tags = [];\nif (j.channel) tags.push('channel:' + String(j.channel).toLowerCase().replace(/ /g,'-'));\nfor (const k in kw) if (msg.includes(k) && !tags.includes(kw[k])) tags.push(kw[k]);\nreturn [{ json: { contact_id: j.contact_id || '', phone: j.phone || '', email: j.email || '', tags } }];"
+        "jsCode": "const j = $input.first().json.body || $input.first().json;\nconst msg = (j.message||'').toLowerCase();\nconst kw = {'giá':'pricing','price':'pricing','mua':'intent-buy','order':'intent-buy','đặt':'intent-buy','lỗi':'support','support':'support','khiếu nại':'complaint'};\nconst tags = [];\nif (j.channel) tags.push('channel:'+String(j.channel).toLowerCase().replace(/ /g,'-'));\nfor (const k in kw) if (msg.includes(k) && !tags.includes(kw[k])) tags.push(kw[k]);\nreturn [{ json: { contact_id: j.contact_id||'', phone: j.phone||'', email: j.email||'', tags } }];"
       },
       "id": "wf002-suggest-tags",
       "name": "Suggest Tags",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [420, 300]
     },
     {
       "parameters": {
@@ -27,37 +27,42 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ phone: $json.phone, email: $json.email, tags: $json.tags }) }}",
-        "options": {}
+        "options": { "timeout": 10000 }
       },
       "id": "wf002-update-tags",
       "name": "Update Tags",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [680, 300]
+      "position": [620, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "intent-buy", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "sales" },
-            { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "support", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "cskh" }
-          ]
-        },
+        "rules": { "values": [
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "intent-buy", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "sales" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [ { "leftValue": "={{ $('Suggest Tags').item.json.tags.join(',') }}", "rightValue": "support", "operator": { "type": "string", "operation": "contains" } } ] }, "outputKey": "cskh" }
+        ] },
         "options": { "fallbackOutput": "extra" }
       },
       "id": "wf002-route",
       "name": "Route",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [900, 300]
+      "position": [820, 300]
     },
     {
-      "parameters": {},
-      "id": "wf002-assign",
-      "name": "Assign (notify Sales/CSKH)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [1120, 300]
+      "parameters": { "select": "channel", "channelId": "={{$env.SALES_SLACK_CHANNEL}}", "text": "=Lead mới cần xử lý: {{ $json.contact_id }}" },
+      "id": "wf002-notify",
+      "name": "Notify Sales (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1040, 300],
+      "disabled": true,
+      "notes": "DISABLED: cần Slack credential + SALES_SLACK_CHANNEL.",
+      "credentials": { "slackApi": { "id": "REPLACE_ME", "name": "OMI Slack (chưa cấu hình)" } }
     }
   ],
   "connections": {
@@ -65,11 +70,11 @@
     "Suggest Tags": { "main": [[{ "node": "Update Tags", "type": "main", "index": 0 }]] },
     "Update Tags": { "main": [[{ "node": "Route", "type": "main", "index": 0 }]] },
     "Route": { "main": [
-      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }],
-      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }],
-      [{ "node": "Assign (notify Sales/CSKH)", "type": "main", "index": 0 }]
+      [{ "node": "Notify Sales (Slack)", "type": "main", "index": 0 }],
+      [{ "node": "Notify Sales (Slack)", "type": "main", "index": 0 }],
+      [{ "node": "Notify Sales (Slack)", "type": "main", "index": 0 }]
     ] }
   },
-  "settings": { "executionOrder": "v1" },
-  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.3-9.4", "credentials_required": false, "note": "Import; đặt env CRM_BASE. Node Assign là điểm cắm notify (Slack/Email)." }
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.3-9.4", "env": ["CRM_BASE", "SALES_SLACK_CHANNEL"], "disabled_nodes": ["Notify Sales (Slack)"] }
 }

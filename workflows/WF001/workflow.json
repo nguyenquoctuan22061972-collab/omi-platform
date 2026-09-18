@@ -7,18 +7,30 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300],
+      "position": [220, 300],
       "webhookId": "crm-lead"
     },
     {
       "parameters": {
-        "jsCode": "// Chuẩn hoá payload đa kênh -> {name,phone,email,channel,message}\nconst b = $input.first().json.body || $input.first().json;\nreturn [{ json: {\n  name: b.name || '',\n  phone: b.phone || '',\n  email: b.email || '',\n  channel: b.channel || 'api_webhook',\n  message: b.message || ''\n}}];"
+        "jsCode": "// Xác thực chữ ký kênh (FB/Zalo...). Cần channel signing secret.\n// Bật node này và dùng credential sau khi go-live.\nreturn $input.all();"
+      },
+      "id": "wf001-verify",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "disabled": true,
+      "notes": "DISABLED: cần channel signing key (credential)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nreturn [{ json: { name: b.name||'', phone: b.phone||'', email: b.email||'', channel: b.channel||'api_webhook', message: b.message||'' } }];"
       },
       "id": "wf001-normalize",
       "name": "Normalize",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [620, 300]
     },
     {
       "parameters": {
@@ -27,13 +39,17 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $json.name, phone: $json.phone, email: $json.email, source: $json.channel }) }}",
-        "options": {}
+        "options": { "timeout": 10000 }
       },
       "id": "wf001-create-contact",
       "name": "Create Contact",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [680, 300]
+      "position": [820, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -42,13 +58,17 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ contact_id: $json.id, channel: $('Normalize').item.json.channel, message: $('Normalize').item.json.message }) }}",
-        "options": {}
+        "options": { "timeout": 10000 }
       },
       "id": "wf001-add-message",
       "name": "Add Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [900, 300]
+      "position": [1020, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ ok: true }) }}" },
@@ -56,15 +76,16 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [1220, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Verify Signature", "type": "main", "index": 0 }]] },
+    "Verify Signature": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
     "Normalize": { "main": [[{ "node": "Create Contact", "type": "main", "index": 0 }]] },
     "Create Contact": { "main": [[{ "node": "Add Message", "type": "main", "index": 0 }]] },
     "Add Message": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   },
-  "settings": { "executionOrder": "v1" },
-  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.1-9.2", "credentials_required": false, "note": "Import vào n8n; đặt env CRM_BASE." }
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.1-9.2", "env": ["CRM_BASE"], "disabled_nodes": ["Verify Signature"], "note": "Import; set CRM_BASE; bật Verify Signature khi có channel secret." }
 }

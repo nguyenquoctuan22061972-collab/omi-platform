@@ -7,45 +7,57 @@
       "name": "Schedule",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [220, 300]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "={{$env.CRM_BASE}}/dashboard/kpi",
-        "options": {}
+        "options": { "timeout": 10000 }
       },
       "id": "wf050-read-kpi",
       "name": "Read KPI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [460, 300],
-      "notes": "GAP: endpoint /dashboard/kpi chưa có ở CRM Core (PRD-003 §11). Cần bổ sung trước khi bật."
+      "position": [420, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "notes": "GAP: CRM Core chưa expose GET /dashboard/kpi (PRD-003 §11)."
     },
     {
       "parameters": {
-        "jsCode": "// Format KPI cho báo cáo định kỳ.\nconst k = $input.first().json;\nreturn [{ json: { report_at: new Date().toISOString(), kpi: k } }];"
+        "jsCode": "const k = $input.first().json;\nreturn [{ json: { report_at: new Date().toISOString(), kpi: k } }];"
       },
       "id": "wf050-format",
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [620, 300]
     },
     {
-      "parameters": {},
-      "id": "wf050-publish",
-      "name": "Publish Report",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [900, 300]
+      "parameters": {
+        "fromEmail": "={{$env.REPORT_FROM_EMAIL}}",
+        "toEmail": "={{$env.REPORT_TO_EMAIL}}",
+        "subject": "OMI KPI Report",
+        "text": "={{ JSON.stringify($json.kpi) }}"
+      },
+      "id": "wf050-send-report",
+      "name": "Send Report (Email)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [840, 300],
+      "disabled": true,
+      "notes": "DISABLED: cần SMTP credential + REPORT_FROM/TO_EMAIL.",
+      "credentials": { "smtp": { "id": "REPLACE_ME", "name": "OMI SMTP (chưa cấu hình)" } }
     }
   ],
   "connections": {
     "Schedule": { "main": [[{ "node": "Read KPI", "type": "main", "index": 0 }]] },
     "Read KPI": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
-    "Format": { "main": [[{ "node": "Publish Report", "type": "main", "index": 0 }]] }
+    "Format": { "main": [[{ "node": "Send Report (Email)", "type": "main", "index": 0 }]] }
   },
-  "settings": { "executionOrder": "v1" },
-  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.5", "credentials_required": false, "gap": "CRM Core cần expose GET /dashboard/kpi (PRD-003 §11)." }
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all" },
+  "meta": { "prd": "PRD-003", "maps": "PRD-001 §9.5", "env": ["CRM_BASE", "REPORT_FROM_EMAIL", "REPORT_TO_EMAIL"], "disabled_nodes": ["Send Report (Email)"], "gap": "CRM Core cần GET /dashboard/kpi." }
 }
