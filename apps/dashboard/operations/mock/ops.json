@@ -1,0 +1,22 @@
+{
+  "containers": [
+    { "name": "crm-core", "status": "healthy" },
+    { "name": "auth-rbac", "status": "healthy" },
+    { "name": "nginx", "status": "healthy" },
+    { "name": "certbot", "status": "running" }
+  ],
+  "workflows": [
+    { "id": "WF001", "name": "Lead Ingestion", "status": "importable", "enabled": false },
+    { "id": "WF002", "name": "Auto-Tag & Routing", "status": "importable", "enabled": false },
+    { "id": "WF050", "name": "KPI Sync", "status": "ready (CR-001)", "enabled": false }
+  ],
+  "backup": { "last": "2026-09-18T02:00:00Z", "status": "ok", "keep": 14 },
+  "ci": { "last_run": "2026-09-18T08:30:00Z", "status": "passing", "suites": 6 },
+  "deploys": [
+    { "ts": "2026-09-18T07:00:00Z", "tag": "v0.5.0", "result": "success" },
+    { "ts": "2026-09-17T12:00:00Z", "tag": "v0.4.0", "result": "success" }
+  ],
+  "alerts": [
+    { "ts": "2026-09-17T03:12:00Z", "level": "warn", "text": "certbot renew sắp tới hạn (mock)" }
+  ]
+}
