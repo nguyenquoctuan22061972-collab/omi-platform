@@ -60,6 +60,30 @@ jobs:
         working-directory: libs/metrics
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — AI Job Queue (PRD-009 A)
+        working-directory: apps/content-factory/queue
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Content Pipeline (PRD-009 E)
+        working-directory: apps/content-factory/pipeline
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Prompt Registry (PRD-009 B)
+        working-directory: libs/prompts
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — AI Router (PRD-009 C)
+        working-directory: libs/ai_router
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Publish Connectors (PRD-009 G)
+        working-directory: libs/publish
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — CEO Autopilot (PRD-009 F)
+        working-directory: apps/ceo-autopilot
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   build-images:
     needs: test
     runs-on: ubuntu-latest
