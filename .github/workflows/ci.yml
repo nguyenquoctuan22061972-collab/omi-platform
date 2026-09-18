@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (auth-rbac)
+        run: pip install -r apps/auth-rbac/requirements.txt
+
+      - name: Test — CRM Core (PRD-001 + CR-001)
+        working-directory: apps/crm-core
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Auth & RBAC (PRD-002)
+        working-directory: apps/auth-rbac
+        env:
+          AUTH_SECRET: ci-secret
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Workflows validator (PRD-003)
+        working-directory: workflows
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Frontend Dashboard (PRD-004)
+        working-directory: apps/dashboard
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Deploy config (PRD-005)
+        working-directory: deploy
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  build-images:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build service images (no push)
+        run: |
+          docker build -f deploy/Dockerfile.crm-core -t omi/crm-core:ci .
+          docker build -f deploy/Dockerfile.auth-rbac -t omi/auth-rbac:ci .
