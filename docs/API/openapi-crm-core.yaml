@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: OMI Platform — CRM Core API
+  version: 1.1.0   # 1.1.0: CR-001 thêm GET /dashboard/kpi (backward compatible)
+  description: CRM Core REST API (PRD-001) + CR-001.
+servers:
+  - url: "{CRM_BASE}"
+    variables:
+      CRM_BASE:
+        default: http://localhost:8080
+paths:
+  /contacts:
+    post:
+      summary: Tạo contact (tự merge theo phone/email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }
+  /contacts/{id}:
+    get:
+      summary: Lấy contact
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }
+        "404": { description: Not found }
+  /messages:
+    post:
+      summary: Ghi message gắn đúng contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessageInput" }
+      responses:
+        "201": { description: Created }
+        "400": { description: Thiếu định danh contact }
+  /conversations:
+    get:
+      summary: Timeline hội thoại
+      parameters:
+        - { name: contact_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+  /pipeline/update:
+    post:
+      summary: Cập nhật stage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PipelineInput" }
+      responses:
+        "200": { description: OK }
+        "400": { description: Stage sai / contact không tồn tại }
+  /dashboard/kpi:                     # CR-001
+    get:
+      summary: KPI realtime cho dashboard (CR-001)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Kpi" }
+components:
+  schemas:
+    ContactInput:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        source: { type: string }
+        tags: { type: array, items: { type: string } }
+    Contact:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        source: { type: string }
+        tags: { type: array, items: { type: string } }
+        created_at: { type: string }
+    MessageInput:
+      type: object
+      required: [channel, message]
+      properties:
+        contact_id: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        channel: { type: string }
+        message: { type: string }
+    PipelineInput:
+      type: object
+      required: [contact_id, stage]
+      properties:
+        contact_id: { type: string }
+        stage: { type: string, enum: [lead, contacted, qualified, proposal, won, lost] }
+    Kpi:
+      type: object
+      properties:
+        total_contacts: { type: integer }
+        total_messages: { type: integer }
+        pipeline_by_stage:
+          type: object
+          additionalProperties: { type: integer }
+        win_rate: { type: number, format: float }
