@@ -1,4 +1,4 @@
-# Tech Spec — TechSpec-001: CRM Core
+# Tech Spec — CRM-Core: CRM Core
 
 **Tên Module:** CRM Core
 

@@ -1,9 +1,9 @@
-# CRM Core (PRD-001 / TechSpec-001)
+# CRM Core (PRD-001 / CRM-Core)
 
 Lõi CRM đa kênh cho OMI Platform. Python 3.11 stdlib (không phụ thuộc mạng).
 
 - PRD: [`../../docs/PRD/PRD-001.md`](../../docs/PRD/PRD-001.md)
-- TechSpec: [`../../docs/TechSpec/TechSpec-001.md`](../../docs/TechSpec/TechSpec-001.md)
+- TechSpec: [`../../docs/TechSpec/CRM-Core.md`](../../docs/TechSpec/CRM-Core.md)
 
 ## Chạy
 ```bash
