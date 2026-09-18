@@ -1,0 +1,6 @@
+{
+  "total_contacts": 1240,
+  "total_messages": 8930,
+  "pipeline_by_stage": { "lead": 520, "contacted": 300, "qualified": 210, "proposal": 120, "won": 60, "lost": 30 },
+  "win_rate": 0.6667
+}
