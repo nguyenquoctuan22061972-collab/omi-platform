@@ -13,16 +13,19 @@ Bản đồ chức năng đã có (chống trùng lặp — luật #4). **Tra fi
 | KPI realtime | crm-dashboard | `dashboard.py` | PRD-001 §5,§10 |
 | Ingest 6 kênh | crm-ingestion | `ingestion.py` | PRD-001 §4 |
 | REST API 5 endpoint | crm-api | `api.py` | PRD-001 §6 |
+| JWT + Refresh + bcrypt | auth | `apps/auth-rbac/src/auth/*` | PRD-002 §3 |
+| RBAC middleware (4 roles) | rbac | `apps/auth-rbac/src/rbac/*` | PRD-002 §3-4 |
+| Audit log | auth-audit | `apps/auth-rbac/src/auth/audit.py` | PRD-002 §3 |
 
 ## Placeholder (chưa hiện thực — cần PRD/TechSpec)
 | Capability | Vị trí | Điều kiện |
 |---|---|---|
-| n8n Lead Ingestion | `workflows/WF001` | credential + TechSpec workflow |
-| n8n AI Tag & Routing | `workflows/WF002` | như trên |
-| n8n Dashboard KPI Sync | `workflows/WF050` | như trên |
-| Auth/RBAC (CEO/Sales/CSKH/Admin) | (chưa) | PRD/TechSpec Security |
+| n8n Lead Ingestion | `workflows/WF001` | credential + TechSpec workflow (PRD-003) |
+| n8n AI Tag & Routing | `workflows/WF002` | như trên (PRD-003) |
+| n8n Dashboard KPI Sync | `workflows/WF050` | như trên (PRD-003) |
 | Rate limiting | (chưa) | giai đoạn Deployment |
 | Webhook idempotency | (chưa) | TechSpec ingestion mở rộng |
+| Persistent refresh store (Redis/DB) | (chưa) | giai đoạn Deployment |
 
 ## Quy tắc
 Muốn thêm capability trùng dòng "Đã hiện thực" → **tái sử dụng**, không viết lại.
