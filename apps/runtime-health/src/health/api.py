@@ -1,0 +1,46 @@
+"""HTTP router cho Runtime Health (PRD-008 A). Endpoints MỚI, không đụng endpoint cũ."""
+from __future__ import annotations
+
+import json
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
+
+from health.service import HealthService
+
+
+def make_handler(svc: HealthService):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, payload):
+            body = json.dumps(payload, ensure_ascii=False).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path = urlparse(self.path).path
+            routes = {
+                "/health": svc.health,
+                "/health/live": svc.liveness,
+                "/health/ready": svc.readiness,
+                "/version": svc.version,
+                "/build-info": svc.build_info,
+            }
+            if path in routes:
+                payload = routes[path]()
+                # readiness chưa sẵn sàng → 503 để orchestrator biết.
+                code = 503 if path == "/health/ready" and payload.get("status") != "ready" else 200
+                return self._send(code, payload)
+            return self._send(404, {"error": "unknown route"})
+
+    return Handler
+
+
+def create_server(host="0.0.0.0", port=8082, env=None):
+    svc = HealthService(env=env if env is not None else os.environ)
+    return HTTPServer((host, port), make_handler(svc))
