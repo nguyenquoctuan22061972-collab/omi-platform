@@ -1,0 +1,10 @@
+# CRM Core (PRD-001) — production image
+FROM python:3.11-slim
+WORKDIR /app
+# stdlib-only: không có dependency ngoài
+COPY apps/crm-core /app
+RUN useradd -m -u 10001 omi && mkdir -p /data && chown -R omi /data /app
+USER omi
+ENV CRM_HOST=0.0.0.0 CRM_PORT=8080 CRM_DB_PATH=/data/crm_core.db
+EXPOSE 8080
+CMD ["python", "run.py"]

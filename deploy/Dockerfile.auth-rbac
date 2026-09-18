@@ -1,0 +1,11 @@
+# Auth & RBAC (PRD-002) — production image
+FROM python:3.11-slim
+WORKDIR /app
+COPY apps/auth-rbac /app
+RUN pip install --no-cache-dir -r requirements.txt \
+    && useradd -m -u 10002 omi && mkdir -p /data && chown -R omi /data /app
+USER omi
+ENV AUTH_HOST=0.0.0.0 AUTH_PORT=8081 AUTH_DB_PATH=/data/auth_rbac.db
+EXPOSE 8081
+# AUTH_SECRET bắt buộc truyền qua env (compose .env)
+CMD ["python", "run.py"]
