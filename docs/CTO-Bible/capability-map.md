@@ -18,6 +18,7 @@ Bản đồ chức năng đã có (chống trùng lặp — luật #4). **Tra fi
 | Audit log | auth-audit | `apps/auth-rbac/src/auth/audit.py` | PRD-002 §3 |
 | KPI endpoint HTTP | crm-api | `apps/crm-core/src/crm/api.py` GET /dashboard/kpi | CR-001 |
 | Frontend Dashboard (KPI UI) | dashboard | `apps/dashboard/*` | PRD-004 |
+| Production deploy (compose/nginx/CI/CD/backup) | deploy | `deploy/*`, `.github/workflows/*` | PRD-005 |
 
 ## Importable (PRD-003 DRAFT — JSON import được, chưa nối credential)
 | Capability | Vị trí | Điều kiện bật "thật" |
