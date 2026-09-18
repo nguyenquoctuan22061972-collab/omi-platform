@@ -1,0 +1,14 @@
+[
+  { "id": "d1", "title": "Deal — Nguyễn An", "stage": "lead", "value": 5000000, "owner": "Sales A",
+    "activity": [ { "ts": "2026-09-18T09:00:00Z", "text": "Tạo lead từ Facebook" } ] },
+  { "id": "d2", "title": "Deal — Trần Bình", "stage": "contacted", "value": 12000000, "owner": "Sales B",
+    "activity": [ { "ts": "2026-09-18T09:10:00Z", "text": "Gọi tư vấn" }, { "ts": "2026-09-18T09:40:00Z", "text": "Gửi báo giá" } ] },
+  { "id": "d3", "title": "Deal — Lê Chi", "stage": "qualified", "value": 8000000, "owner": "Sales A",
+    "activity": [ { "ts": "2026-09-18T08:30:00Z", "text": "Xác định nhu cầu" } ] },
+  { "id": "d4", "title": "Deal — Phạm Dũng", "stage": "proposal", "value": 20000000, "owner": "Sales C",
+    "activity": [ { "ts": "2026-09-18T08:00:00Z", "text": "Gửi proposal" } ] },
+  { "id": "d5", "title": "Deal — Vũ Em", "stage": "won", "value": 15000000, "owner": "Sales B",
+    "activity": [ { "ts": "2026-09-17T15:00:00Z", "text": "Chốt deal" } ] },
+  { "id": "d6", "title": "Deal — Đỗ Phúc", "stage": "lost", "value": 0, "owner": "Sales C",
+    "activity": [ { "ts": "2026-09-17T16:00:00Z", "text": "Khách ngừng phản hồi" } ] }
+]
