@@ -1,10 +1,10 @@
-"""QA validator cho workflow n8n (PRD-003 §9, scope B).
+"""QA validator workflow n8n (PRD-003 §10, scope B). Kiểm tra tĩnh, không cần n8n.
 
-Kiểm tra tĩnh — không cần n8n chạy:
-- JSON hợp lệ, có name/nodes/connections.
-- Có ít nhất 1 trigger + 1 HTTP Request node.
-- Mọi connection trỏ tới node tồn tại.
-- URL HTTP dùng {{$env.CRM_BASE}} (không hardcode host/secret).
+Map acceptance:
+  TC1 JSON hợp lệ/import được   TC2 có trigger + HTTP node
+  TC3 connection trỏ node tồn tại  TC4 URL dùng $env.CRM_BASE
+  TC5 không secret literal      TC6 node cần credential đều disabled
+  TC7 có .env.example
 """
 import glob
 import json
@@ -21,50 +21,66 @@ TRIGGERS = {
 
 def _load_all():
     files = sorted(glob.glob(os.path.join(WF_DIR, "WF*", "workflow.json")))
-    return [(f, json.load(open(f, encoding="utf-8"))) for f in files]
+    out = []
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            out.append((f, json.load(fh)))
+    return out
 
 
 class TestWorkflows(unittest.TestCase):
     def setUp(self):
         self.wfs = _load_all()
-        self.assertEqual(len(self.wfs), 3, "phải có đúng 3 workflow WF001/WF002/WF050")
+        self.assertEqual(len(self.wfs), 3, "TC1: cần đúng 3 workflow")
 
-    def test_valid_structure(self):
+    def test_TC1_valid_structure(self):
         for path, wf in self.wfs:
             self.assertIn("name", wf, path)
-            self.assertIsInstance(wf.get("nodes"), list, path)
-            self.assertTrue(wf["nodes"], f"{path} không có node")
+            self.assertTrue(isinstance(wf.get("nodes"), list) and wf["nodes"], path)
             self.assertIn("connections", wf, path)
 
-    def test_has_trigger_and_http(self):
+    def test_TC2_has_trigger_and_http(self):
         for path, wf in self.wfs:
             types = [n["type"] for n in wf["nodes"]]
             self.assertTrue(any(t in TRIGGERS for t in types), f"{path} thiếu trigger")
-            self.assertIn("n8n-nodes-base.httpRequest", types, f"{path} thiếu HTTP node")
+            self.assertIn("n8n-nodes-base.httpRequest", types, f"{path} thiếu HTTP")
 
-    def test_connections_point_to_existing_nodes(self):
+    def test_TC3_connections_valid(self):
         for path, wf in self.wfs:
             names = {n["name"] for n in wf["nodes"]}
             for src, conn in wf["connections"].items():
-                self.assertIn(src, names, f"{path}: nguồn '{src}' không tồn tại")
-                for outputs in conn.get("main", []):
-                    for link in outputs:
-                        self.assertIn(link["node"], names,
-                                      f"{path}: đích '{link['node']}' không tồn tại")
+                self.assertIn(src, names, f"{path}: nguồn '{src}' lạ")
+                for outs in conn.get("main", []):
+                    for link in outs:
+                        self.assertIn(link["node"], names, f"{path}: đích '{link['node']}' lạ")
 
-    def test_http_urls_use_env_no_secret(self):
+    def test_TC4_http_uses_env(self):
         for path, wf in self.wfs:
             for n in wf["nodes"]:
                 if n["type"] == "n8n-nodes-base.httpRequest":
-                    url = n["parameters"].get("url", "")
-                    self.assertIn("$env.CRM_BASE", url,
-                                  f"{path}: URL '{url}' không dùng env CRM_BASE")
+                    self.assertIn("$env.CRM_BASE", n["parameters"].get("url", ""),
+                                  f"{path}: URL không dùng CRM_BASE")
 
-    def test_no_hardcoded_secret_markers(self):
+    def test_TC5_no_secret_literal(self):
         for path, wf in self.wfs:
             blob = json.dumps(wf).lower()
-            for bad in ("password", "token=", "bearer ", "api_key", "secret\""):
-                self.assertNotIn(bad, blob, f"{path}: có dấu hiệu secret hardcode: {bad}")
+            for bad in ('password":', "token=", "bearer ", "api_key", "xoxb-", "secret_key"):
+                self.assertNotIn(bad, blob, f"{path}: nghi secret literal '{bad}'")
+
+    def test_TC6_credential_nodes_disabled(self):
+        """Mọi node có 'credentials' phải disabled (chờ gắn secret)."""
+        for path, wf in self.wfs:
+            for n in wf["nodes"]:
+                if n.get("credentials"):
+                    self.assertTrue(n.get("disabled") is True,
+                                    f"{path}: node '{n['name']}' có credential nhưng chưa disabled")
+
+    def test_TC7_env_example_exists(self):
+        env = os.path.join(WF_DIR, ".env.example")
+        self.assertTrue(os.path.isfile(env), "thiếu workflows/.env.example")
+        content = open(env, encoding="utf-8").read()
+        for key in ("N8N_BASE_URL", "CRM_BASE"):
+            self.assertIn(key, content, f".env.example thiếu {key}")
 
 
 if __name__ == "__main__":

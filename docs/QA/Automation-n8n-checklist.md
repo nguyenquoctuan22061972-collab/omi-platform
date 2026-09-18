@@ -1,35 +1,41 @@
-# QA Checklist — Automation n8n (PRD-003 DRAFT, scope B)
+# QA Checklist — Automation n8n (PRD-003, scope B)
 
 ## Kết quả
-- ✅ **5/5 validator test PASS** (`workflows/tests/test_workflows.py`)
-- ✅ JSON hợp lệ, import được vào n8n (WF001/WF002/WF050)
+- ✅ **7/7 validator test PASS** (`workflows/tests/test_workflows.py`)
+- ✅ 3 JSON hợp lệ, import được (WF001/WF002/WF050)
 
-## Map QA PRD-003 §9 → validator
-| QA | Test | Kết quả |
+## Test cases → Acceptance criteria
+| TC | Nội dung | Acceptance | Test | KQ |
+|---|---|---|---|---|
+| TC1 | JSON hợp lệ | 3 file parse + có name/nodes/connections | `test_TC1_valid_structure` | ✅ |
+| TC2 | Trigger + HTTP | mỗi WF ≥1 trigger & ≥1 httpRequest | `test_TC2_has_trigger_and_http` | ✅ |
+| TC3 | Connection | mọi đích/nguồn là node tồn tại | `test_TC3_connections_valid` | ✅ |
+| TC4 | Env URL | httpRequest dùng `{{$env.CRM_BASE}}` | `test_TC4_http_uses_env` | ✅ |
+| TC5 | No secret | không secret literal trong JSON | `test_TC5_no_secret_literal` | ✅ |
+| TC6 | Disabled | node có credential đều `disabled` | `test_TC6_credential_nodes_disabled` | ✅ |
+| TC7 | Env file | có `.env.example` + N8N_BASE_URL/CRM_BASE | `test_TC7_env_example_exists` | ✅ |
+
+## Node cần secret → đã disabled
+| WF | Node disabled | Lý do |
 |---|---|---|
-| JSON hợp lệ, import được | `test_valid_structure` | ✅ |
-| Có trigger + HTTP node | `test_has_trigger_and_http` | ✅ |
-| Connection trỏ node tồn tại | `test_connections_point_to_existing_nodes` | ✅ |
-| URL dùng `$env.CRM_BASE` | `test_http_urls_use_env_no_secret` | ✅ |
-| Không hardcode secret | `test_no_hardcoded_secret_markers` | ✅ |
+| WF001 | Verify Signature | channel signing key |
+| WF002 | Notify Sales (Slack) | Slack credential + SALES_SLACK_CHANNEL |
+| WF050 | Send Report (Email) | SMTP credential + REPORT_*_EMAIL |
 
-## Trạng thái workflow
-| WF | Map PRD-001 §9 | Importable | Credential |
-|---|---|:--:|---|
-| WF001 Lead Ingestion | 9.1-9.2 | ✅ | chưa nối (scope B) |
-| WF002 AI Tag & Routing | 9.3-9.4 | ✅ | chưa nối (scope B) |
-| WF050 KPI Sync | 9.5 | ✅ | chưa nối; ⚠️ gap KPI endpoint |
+## Acceptance criteria (Definition of Done — scope B)
+- [x] PRD-003 đầy đủ (11 mục) + TechSpec chi tiết
+- [x] 3 workflow JSON importable; node cần secret = disabled; credential = placeholder
+- [x] `.env.example` liệt kê mọi biến
+- [x] Sequence + data-flow (Architecture) · error/retry/logging/rollback (runbook)
+- [x] Naming convention + folder structure + ADR-0002
+- [x] Validator 7 test PASS
+- [x] Không secret literal trong repo
 
 ## Lệnh chạy lại
 ```bash
 cd workflows && python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-## Ngoài scope B (cần credential/n8n để hoàn tất "thật")
-- [ ] Gắn credential từng kênh trong n8n
-- [ ] Đặt `CRM_BASE` trỏ CRM Core đang chạy
-- [ ] Bổ sung endpoint `GET /dashboard/kpi` cho CRM Core (gap PRD-003 §11) trước khi bật WF050
-- [ ] Retry/backoff + idempotency webhook
-
-## Định nghĩa Done (scope B) — đạt
-File ✅ · Checklist ✅ · Test ✅ · Risk notes ✅
+## Ngoài scope B (go-live)
+Gắn `N8N_BASE_URL`+`CRM_BASE`+credential → bật node disabled → thêm endpoint
+`GET /dashboard/kpi` cho CRM Core (gap) → theo runbook §Go-live.
