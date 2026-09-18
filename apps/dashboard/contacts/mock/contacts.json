@@ -1,0 +1,9 @@
+[
+  { "id": "c1", "name": "Nguyễn An", "phone": "0900000001", "email": "an@example.com", "source": "facebook_messenger", "tags": ["vip"], "stage": "qualified" },
+  { "id": "c2", "name": "Trần Bình", "phone": "0900000002", "email": "binh@example.com", "source": "zalo_oa", "tags": ["pricing"], "stage": "lead" },
+  { "id": "c3", "name": "Lê Chi", "phone": "0900000003", "email": "chi@example.com", "source": "telegram", "tags": [], "stage": "contacted" },
+  { "id": "c4", "name": "Phạm Dũng", "phone": "0900000004", "email": "dung@example.com", "source": "email", "tags": ["intent-buy"], "stage": "proposal" },
+  { "id": "c5", "name": "Vũ Em", "phone": "0900000005", "email": "em@example.com", "source": "form_landing_page", "tags": [], "stage": "won" },
+  { "id": "c6", "name": "Đỗ Phúc", "phone": "0900000006", "email": "phuc@example.com", "source": "api_webhook", "tags": ["support"], "stage": "lost" },
+  { "id": "c7", "name": "Hồ Giang", "phone": "0900000007", "email": "giang@example.com", "source": "facebook_messenger", "tags": [], "stage": "lead" }
+]

@@ -1,0 +1,25 @@
+/* PRD-006 — style bổ sung cho Contacts/Inbox/Pipeline/Operations. KHÔNG sửa styles.css (PRD-004). */
+.toolbar { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.toolbar input, .toolbar select { padding:8px 10px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; }
+.tbl { width:100%; border-collapse:collapse; background:#1e293b; border-radius:10px; overflow:hidden; }
+.tbl th, .tbl td { text-align:left; padding:10px 12px; border-bottom:1px solid #334155; }
+.tbl tbody tr { cursor:pointer; }
+.tbl tbody tr:hover { background:rgba(56,189,248,.08); }
+.pager { display:flex; align-items:center; gap:12px; margin-top:12px; }
+.pager button { padding:6px 12px; border-radius:8px; border:none; background:#334155; color:#e2e8f0; cursor:pointer; }
+.pager button:disabled { opacity:.4; cursor:default; }
+.detail { margin-top:16px; }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.chip { padding:6px 12px; border-radius:16px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; cursor:pointer; }
+.chip.active { background:#38bdf8; color:#0f172a; }
+.msg { background:#1e293b; padding:10px 12px; border-radius:8px; margin:6px 0; }
+.msg-ch { display:inline-block; font-size:11px; background:#334155; padding:1px 6px; border-radius:6px; margin-right:6px; }
+.kanban { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; overflow-x:auto; }
+.kanban .col { background:#1e293b; border-radius:10px; padding:10px; min-width:140px; }
+.kanban .col h3 { font-size:13px; text-transform:capitalize; margin:0 0 8px; color:#94a3b8; }
+.deal { background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px; margin-bottom:8px; cursor:pointer; font-size:13px; }
+.timeline { margin:0; padding-left:18px; }
+.timeline li { margin:4px 0; }
+.badge.ok { background:#166534; }
+.badge.warn { background:#b45309; }
+@media (max-width:640px){ .kanban { grid-template-columns:1fr; } }
