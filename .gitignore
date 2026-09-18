@@ -9,4 +9,5 @@ deploy/data/
 deploy/backups/
 deploy/certs/
 deploy/certbot-www/
+deploy/.last_good_tag
 apps/dashboard/config.js
