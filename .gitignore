@@ -4,4 +4,9 @@ __pycache__/
 *.sqlite3
 .DS_Store
 .env
+deploy/.env
+deploy/data/
+deploy/backups/
+deploy/certs/
+deploy/certbot-www/
 apps/dashboard/config.js
