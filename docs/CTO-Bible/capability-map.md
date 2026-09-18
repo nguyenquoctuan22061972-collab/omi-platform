@@ -17,12 +17,16 @@ Bản đồ chức năng đã có (chống trùng lặp — luật #4). **Tra fi
 | RBAC middleware (4 roles) | rbac | `apps/auth-rbac/src/rbac/*` | PRD-002 §3-4 |
 | Audit log | auth-audit | `apps/auth-rbac/src/auth/audit.py` | PRD-002 §3 |
 
+## Importable (PRD-003 DRAFT — JSON import được, chưa nối credential)
+| Capability | Vị trí | Điều kiện bật "thật" |
+|---|---|---|
+| n8n Lead Ingestion | `workflows/WF001/workflow.json` | credential kênh + CRM_BASE |
+| n8n AI Tag & Routing | `workflows/WF002/workflow.json` | CRM_BASE + notify node |
+| n8n Dashboard KPI Sync | `workflows/WF050/workflow.json` | CRM_BASE + **GET /dashboard/kpi (gap)** |
+
 ## Placeholder (chưa hiện thực — cần PRD/TechSpec)
 | Capability | Vị trí | Điều kiện |
 |---|---|---|
-| n8n Lead Ingestion | `workflows/WF001` | credential + TechSpec workflow (PRD-003) |
-| n8n AI Tag & Routing | `workflows/WF002` | như trên (PRD-003) |
-| n8n Dashboard KPI Sync | `workflows/WF050` | như trên (PRD-003) |
 | Rate limiting | (chưa) | giai đoạn Deployment |
 | Webhook idempotency | (chưa) | TechSpec ingestion mở rộng |
 | Persistent refresh store (Redis/DB) | (chưa) | giai đoạn Deployment |

@@ -16,10 +16,16 @@ TechSpec + code 9 module + REST 5 endpoint + 14 test PASS + n8n placeholders.
 - [x] `Product/vision.md`
 - [x] `Roadmap/roadmap.md`
 
-### ⏭️ Giai đoạn 3 — Module tiếp theo (chờ PRD)
-Ứng viên (cần PRD trước khi code — luật #2):
-- **PRD-002:** Auth & RBAC (CEO/Sales/CSKH/Admin) — gỡ Risk "Phân quyền sai".
-- **PRD-003:** Automation n8n thật (WF001/WF002/WF050) — credential + idempotency.
+### ✅ Giai đoạn 3a — Auth & RBAC (PRD-002)
+JWT+refresh+bcrypt, RBAC 4 roles, audit log. 19 test PASS. **Done, đã push.**
+
+### 🔄 Giai đoạn 3b — Automation n8n (PRD-003 DRAFT, scope B)
+Workflow JSON importable WF001/WF002/WF050 + validator 5 test PASS. **Done (skeleton),
+đã push.** Còn lại (ngoài scope B): credential + deploy + endpoint KPI.
+
+### ⏭️ Tiếp theo (chờ PRD/duyệt)
+- Duyệt PRD-003 + cung cấp credential/n8n để bật automation "thật" (phương án A).
+- **CR CRM Core:** expose `GET /dashboard/kpi` (gap PRD-003 §11).
 - **PRD-004:** Frontend (5 màn hình theo wireframe §8).
 - **PRD-005:** Deployment (ASGI + Postgres + rate-limit + CI/CD).
 
