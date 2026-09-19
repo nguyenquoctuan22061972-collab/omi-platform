@@ -7,9 +7,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 from health.service import HealthService
+from health.gateway import HealthGateway
 
 
-def make_handler(svc: HealthService):
+def make_handler(svc: HealthService, gateway: "HealthGateway | None" = None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -36,11 +37,17 @@ def make_handler(svc: HealthService):
                 # readiness chưa sẵn sàng → 503 để orchestrator biết.
                 code = 503 if path == "/health/ready" and payload.get("status") != "ready" else 200
                 return self._send(code, payload)
+            if path == "/health/gateway":  # PRD-011 C (endpoint mới)
+                gw = gateway or HealthGateway(env=svc.env)
+                payload = gw.gateway()
+                code = 200 if payload.get("status") == "ready" else 503
+                return self._send(code, payload)
             return self._send(404, {"error": "unknown route"})
 
     return Handler
 
 
-def create_server(host="0.0.0.0", port=8082, env=None):
-    svc = HealthService(env=env if env is not None else os.environ)
-    return HTTPServer((host, port), make_handler(svc))
+def create_server(host="0.0.0.0", port=8082, env=None, gateway=None):
+    e = env if env is not None else os.environ
+    svc = HealthService(env=e)
+    return HTTPServer((host, port), make_handler(svc, gateway))
