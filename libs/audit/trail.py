@@ -42,12 +42,15 @@ class MemorySink:
 
 
 class AuditTrail:
-    def __init__(self, sink: Sink | None = None):
+    def __init__(self, sink: Sink | None = None, extra_events: set | None = None):
+        # extra_events (additive, PRD-013): mở rộng vocab cho lớp orchestrator mà KHÔNG
+        # đổi EVENTS gốc. Mặc định giữ nguyên hành vi cũ.
         self.sink = sink or MemorySink()
+        self.events = EVENTS | set(extra_events or ())
 
     def record(self, event: str, actor: str = "", target: str = "", meta: Dict | None = None) -> Dict:
-        if event not in EVENTS:
-            raise ValueError(f"event không hợp lệ: {event}. Cho phép: {sorted(EVENTS)}")
+        if event not in self.events:
+            raise ValueError(f"event không hợp lệ: {event}. Cho phép: {sorted(self.events)}")
         rec = {
             "id": "aud_" + uuid.uuid4().hex[:16],
             "ts": datetime.now(timezone.utc).isoformat(),
