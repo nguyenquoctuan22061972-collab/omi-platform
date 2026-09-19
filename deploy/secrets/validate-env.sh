@@ -40,7 +40,41 @@ for group in "${ADAPTER_GROUPS[@]}"; do
 done
 
 echo "== Kết quả =="
-if [ ${#missing[@]} -eq 0 ]; then
+if [ ${#missing[@]} -eq 0 ]; then RESULT="PASS"; else RESULT="FAIL"; fi
+
+# --report [file]: sinh deploy/runtime-status.md (PRD-011 B). KHÔNG in giá trị secret.
+if [ "${1:-}" = "--report" ]; then
+  OUT="${2:-deploy/runtime-status.md}"
+  {
+    echo "# Runtime Status — OMI Platform"
+    echo
+    echo "> Sinh bởi \`deploy/secrets/validate-env.sh --report\`. KHÔNG chứa giá trị secret."
+    echo
+    echo "**Kết quả tổng:** $RESULT · $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo
+    echo "## Core"
+    for v in "${REQUIRED_CORE[@]}"; do
+      if [ -z "${!v:-}" ]; then echo "- ❌ $v — MISSING"; else echo "- ✅ $v — present"; fi
+    done
+    echo
+    echo "## Adapters (bật khi *_ENABLED=true)"
+    for group in "${ADAPTER_GROUPS[@]}"; do
+      flag="${group%%:*}"; vars="${group#*:}"
+      if truthy "${!flag:-}"; then
+        echo "- [$flag=on]"
+        IFS=',' read -ra keys <<< "$vars"
+        for v in "${keys[@]}"; do
+          if [ -z "${!v:-}" ]; then echo "  - ❌ $v — MISSING"; else echo "  - ✅ $v — present"; fi
+        done
+      else
+        echo "- [$flag=off] bỏ qua"
+      fi
+    done
+  } > "$OUT"
+  echo "Đã ghi $OUT"
+fi
+
+if [ "$RESULT" = "PASS" ]; then
   echo "PASS — đủ env cho cấu hình hiện tại."; exit 0
 else
   echo "FAIL — thiếu ${#missing[@]} biến: ${missing[*]}"; exit 1
