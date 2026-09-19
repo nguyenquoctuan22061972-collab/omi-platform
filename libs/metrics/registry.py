@@ -15,6 +15,8 @@ METRIC_NAMES = [
     "adapter_latency_ms",     # độ trễ adapter gần nhất
     "execution_success",      # tổng lần chạy thành công
     "execution_failure",      # tổng lần chạy thất bại
+    # PRD-013 B (additive) — queue orchestration:
+    "retry_count",            # tổng lần retry trong hàng đợi
 ]
 
 
