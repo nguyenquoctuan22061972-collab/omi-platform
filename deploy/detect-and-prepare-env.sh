@@ -50,22 +50,35 @@ else
 fi
 ensure_env "CRM_BASE" "$CRM_BASE_VAL"
 
-# ---- 5. Detect N8N_BASE_URL từ container n8n đang chạy ----
+# ---- 1+5. Inspect container n8n & detect N8N_BASE_URL ----
 N8N_VAL=""
+N8N_HOST_V=""; N8N_PROTO_V=""; N8N_PORT_V=""
 N8N_CT="$(docker ps --filter 'name=n8n' --format '{{.Names}}' 2>/dev/null | head -1)"
 if [ -n "$N8N_CT" ]; then
-  # thử env editor/webhook trong container
-  for k in N8N_EDITOR_BASE_URL WEBHOOK_URL N8N_HOST; do
-    v="$(docker inspect --format "{{range .Config.Env}}{{println .}}{{end}}" "$N8N_CT" 2>/dev/null | grep -E "^${k}=" | head -1 | cut -d= -f2-)"
-    if [ -n "$v" ]; then
-      case "$k" in N8N_HOST) N8N_VAL="https://${v}";; *) N8N_VAL="$v";; esac
-      break
-    fi
-  done
-  # fallback: published port 5678
-  if [ -z "$N8N_VAL" ]; then
-    HP="$(docker inspect --format '{{range $p,$c := .NetworkSettings.Ports}}{{if eq $p "5678/tcp"}}{{(index $c 0).HostPort}}{{end}}{{end}}' "$N8N_CT" 2>/dev/null | head -1)"
-    [ -n "$HP" ] && N8N_VAL="http://localhost:${HP}"
+  ENVDUMP="$(docker inspect --format "{{range .Config.Env}}{{println .}}{{end}}" "$N8N_CT" 2>/dev/null)"
+  getenv() { printf '%s\n' "$ENVDUMP" | grep -E "^$1=" | head -1 | cut -d= -f2-; }
+  WEBHOOK_V="$(getenv WEBHOOK_URL)"; EDITOR_V="$(getenv N8N_EDITOR_BASE_URL)"
+  N8N_HOST_V="$(getenv N8N_HOST)"; N8N_PROTO_V="$(getenv N8N_PROTOCOL)"; N8N_PORT_V="$(getenv N8N_PORT)"
+  PUB_PORT="$(docker inspect --format '{{range $p,$c := .NetworkSettings.Ports}}{{if eq $p "5678/tcp"}}{{(index $c 0).HostPort}}{{end}}{{end}}' "$N8N_CT" 2>/dev/null | head -1)"
+  log "== 1. n8n inspect =="
+  log "  container: $N8N_CT"
+  log "  WEBHOOK_URL=${WEBHOOK_V:-<none>}  N8N_HOST=${N8N_HOST_V:-<none>}  N8N_PROTOCOL=${N8N_PROTO_V:-<none>}  N8N_PORT=${N8N_PORT_V:-<none>}"
+  log "  exposed 5678 -> host port: ${PUB_PORT:-<none>}"
+  # thứ tự ưu tiên: WEBHOOK_URL > editor base > host+proto > published port
+  if   [ -n "$WEBHOOK_V" ]; then N8N_VAL="${WEBHOOK_V%/}"
+  elif [ -n "$EDITOR_V" ];  then N8N_VAL="${EDITOR_V%/}"
+  elif [ -n "$N8N_HOST_V" ]; then N8N_VAL="${N8N_PROTO_V:-https}://${N8N_HOST_V}$([ -n "$N8N_PORT_V" ] && [ "$N8N_PORT_V" != 80 ] && [ "$N8N_PORT_V" != 443 ] && echo ":$N8N_PORT_V")"
+  elif [ -n "$PUB_PORT" ]; then N8N_VAL="http://localhost:${PUB_PORT}"
+  fi
+fi
+
+# ---- 2. Domain/IP strategy: nếu chưa có domain → dùng IP VPS tạm thời ----
+if [ -z "$N8N_VAL" ]; then
+  VPS_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  N8N_PORT_FALLBACK="${N8N_PORT_V:-5678}"
+  if [ -n "$VPS_IP" ]; then
+    N8N_VAL="http://${VPS_IP}:${N8N_PORT_FALLBACK}"
+    log "== 2. Không có domain/URL → dùng IP VPS tạm: $N8N_VAL"
   fi
 fi
 ensure_env "N8N_BASE_URL" "$N8N_VAL"

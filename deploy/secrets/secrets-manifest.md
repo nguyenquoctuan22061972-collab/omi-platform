@@ -24,3 +24,13 @@
 - Không commit secret; repo chỉ có `.env.example` + manifest này.
 - Adapter mặc định **tắt** (dry-run) tới khi `<PREFIX>_ENABLED=true` và đủ biến.
 - Kiểm tra: `deploy/secrets/validate-env.sh` (in thiếu/đủ, không in giá trị).
+
+## Alert Engine (PRD-012 E) — bật khi cần, dry-run tới khi có credential
+| Biến | Bật khi |
+|---|---|
+| `TELEGRAM_ALERT_ENABLED` | =true để bật alert Telegram |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | khi TELEGRAM_ALERT_ENABLED=true |
+| `SMTP_ALERT_ENABLED` | =true để bật alert email |
+| `SMTP_HOST`,`SMTP_PORT`,`SMTP_USER`,`SMTP_PASS`,`ALERT_TO_EMAIL` | khi SMTP_ALERT_ENABLED=true |
+
+> Đặt trong `deploy/.env` trên VPS (gitignored). Không commit giá trị.
