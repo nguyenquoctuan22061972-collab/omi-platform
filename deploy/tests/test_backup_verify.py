@@ -82,6 +82,23 @@ class TestBackupVolumeMode(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertTrue([f for f in os.listdir(bdir) if f.endswith(".tar.gz")])
 
+    def test_wrapper_forwards_to_canonical(self):
+        # deploy/backup/backup.sh chỉ là wrapper exec sang scripts/backup.sh (fallback mode chạy được).
+        wrapper = os.path.join(DEPLOY, "backup", "backup.sh")
+        self.assertTrue(os.path.isfile(wrapper))
+        self.assertEqual(subprocess.run(["bash", "-n", wrapper]).returncode, 0)
+        self.assertIn("scripts/backup.sh", open(wrapper, encoding="utf-8").read())
+        with tempfile.TemporaryDirectory() as tmp:
+            data = os.path.join(tmp, "data")
+            os.makedirs(data)
+            open(os.path.join(data, "crm_core.db"), "wb").write(b"SQLite format 3\x00x")
+            bdir = os.path.join(tmp, "backups")
+            env = dict(os.environ, DATA_DIR=data, BACKUP_DIR=bdir, BACKUP_KEEP="14")
+            env.pop("PG_VOLUME", None)
+            r = subprocess.run(["bash", wrapper], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue([f for f in os.listdir(bdir) if f.endswith(".tar.gz")])
+
     def test_volume_missing_fails_clearly(self):
         # PG_VOLUME trỏ volume không tồn tại → lỗi rõ ràng, không im lặng.
         with tempfile.TemporaryDirectory() as tmp:
