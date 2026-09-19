@@ -21,6 +21,7 @@ def build_snapshot(
     execution_success: int = 0,
     execution_failure: int = 0,
     retry_count: int = 0,
+    cost_spent: float = 0.0,
 ) -> Dict[str, float]:
     """Tạo snapshot metric chuẩn (registry.METRIC_NAMES) từ nguồn inject.
 
@@ -38,6 +39,7 @@ def build_snapshot(
         "execution_success": execution_success,
         "execution_failure": execution_failure,
         "retry_count": retry_count,
+        "cost_spent": cost_spent,
     })
     return MetricsRegistry(p).snapshot()
 

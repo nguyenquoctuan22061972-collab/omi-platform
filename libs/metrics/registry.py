@@ -17,6 +17,8 @@ METRIC_NAMES = [
     "execution_failure",      # tổng lần chạy thất bại
     # PRD-013 B (additive) — queue orchestration:
     "retry_count",            # tổng lần retry trong hàng đợi
+    # PRD-014 E (additive) — cost guard:
+    "cost_spent",             # tổng chi phí đã tiêu (đơn vị trừu tượng)
 ]
 
 
