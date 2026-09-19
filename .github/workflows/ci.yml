@@ -108,6 +108,10 @@ jobs:
         working-directory: libs/analytics
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Runtime env loader (PRD-011 A)
+        working-directory: libs/runtime
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   build-images:
     needs: test
     runs-on: ubuntu-latest
