@@ -112,6 +112,10 @@ jobs:
         working-directory: libs/runtime
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Alert Engine (PRD-012 E)
+        working-directory: libs/alerts
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   build-images:
     needs: test
     runs-on: ubuntu-latest
