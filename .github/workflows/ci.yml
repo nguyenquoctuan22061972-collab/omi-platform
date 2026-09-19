@@ -80,8 +80,32 @@ jobs:
         working-directory: libs/publish
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Test — CEO Autopilot (PRD-009 F)
+      - name: Test — CEO Autopilot (PRD-009 F + PRD-010 F)
         working-directory: apps/ceo-autopilot
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Revenue Engine (PRD-010 A)
+        working-directory: apps/revenue-engine
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Affiliate Registry (PRD-010 B)
+        working-directory: libs/affiliate
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Lead Engine (PRD-010 C)
+        working-directory: libs/lead
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — YouTube Runtime (PRD-010 D)
+        working-directory: libs/youtube
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Content Calendar (PRD-010 E)
+        working-directory: apps/content-factory/calendar
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — Analytics Layer (PRD-010 G)
+        working-directory: libs/analytics
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   build-images:
