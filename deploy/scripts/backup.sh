@@ -23,19 +23,20 @@ if [ -n "$PG_VOLUME" ]; then
   if ! docker volume inspect "$PG_VOLUME" >/dev/null 2>&1; then
     echo "ERROR: docker volume '$PG_VOLUME' không tồn tại" >&2; exit 1
   fi
-  # Chọn helper image đã có sẵn (ưu tiên image container postgres → KHÔNG cần pull/cài mới).
+  # Helper image: dùng image của chính container postgres (KHÔNG pull mới); fallback alpine chỉ khi cần.
   HELPER_IMAGE="${BACKUP_HELPER_IMAGE:-}"
+  [ -z "$HELPER_IMAGE" ] && HELPER_IMAGE="$(docker inspect postgres --format '{{.Config.Image}}' 2>/dev/null || true)"
   if [ -z "$HELPER_IMAGE" ]; then
     PG_CT="$(docker ps --filter 'name=postgres' --format '{{.Names}}' 2>/dev/null | head -1)"
     [ -n "$PG_CT" ] && HELPER_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$PG_CT" 2>/dev/null || true)"
   fi
   HELPER_IMAGE="${HELPER_IMAGE:-alpine:3}"
-  # Mount volume READ-ONLY; không tắt/đụng container postgres đang chạy.
+  # Mount volume READ-ONLY tại /src; KHÔNG stop/exec container postgres.
   if ! docker run --rm \
-        -v "$PG_VOLUME":/vol:ro \
+        -v "$PG_VOLUME":/src:ro \
         -v "$ABS_BACKUP_DIR":/backup \
         "$HELPER_IMAGE" \
-        tar -czf "/backup/omi-backup-$TS.tar.gz" -C /vol . ; then
+        tar -czf "/backup/omi-backup-$TS.tar.gz" -C /src . ; then
     echo "ERROR: backup docker volume '$PG_VOLUME' thất bại" >&2; exit 1
   fi
   echo "Backup (volume $PG_VOLUME, image $HELPER_IMAGE): $ARCHIVE"
