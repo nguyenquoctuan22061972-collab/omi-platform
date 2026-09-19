@@ -20,6 +20,17 @@ class TestCollectors(unittest.TestCase):
     def test_health_degraded(self):
         self.assertEqual(build_snapshot(health_ready=False)["health_summary"], 0.0)
 
+    def test_phase12_extra_metrics(self):
+        # Module A additive: workflow duration, adapter latency, execution success/failure
+        snap = build_snapshot(workflow_duration_ms=120.5, adapter_latency_ms=42.0,
+                              execution_success=7, execution_failure=1)
+        self.assertEqual(snap["workflow_duration_ms"], 120.5)
+        self.assertEqual(snap["adapter_latency_ms"], 42.0)
+        self.assertEqual(snap["execution_success"], 7)
+        self.assertEqual(snap["execution_failure"], 1)
+        for m in ("workflow_duration_ms", "adapter_latency_ms", "execution_success", "execution_failure"):
+            self.assertIn(m, METRIC_NAMES)
+
     def test_metrics_text(self):
         txt = metrics_text(queue_pending=5)
         self.assertIn("omi_queue_size 5", txt)

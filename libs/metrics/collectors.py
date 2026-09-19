@@ -16,14 +16,26 @@ def build_snapshot(
     adapters_enabled: int = 0,
     workflow_count: int = 0,
     dashboard_latency_ms: float = 0.0,
+    workflow_duration_ms: float = 0.0,
+    adapter_latency_ms: float = 0.0,
+    execution_success: int = 0,
+    execution_failure: int = 0,
 ) -> Dict[str, float]:
-    """Tạo snapshot 5 metric chuẩn (registry.METRIC_NAMES) từ nguồn inject."""
+    """Tạo snapshot metric chuẩn (registry.METRIC_NAMES) từ nguồn inject.
+
+    Phase 12 Module A (additive): thêm workflow_duration_ms, adapter_latency_ms,
+    execution_success/failure. Metric không truyền vẫn mặc định 0.0.
+    """
     p = MockProvider({
         "workflow_count": workflow_count,
         "queue_size": queue_pending,
         "adapter_status": adapters_enabled,
         "dashboard_latency_ms": dashboard_latency_ms,
         "health_summary": 1.0 if health_ready else 0.0,
+        "workflow_duration_ms": workflow_duration_ms,
+        "adapter_latency_ms": adapter_latency_ms,
+        "execution_success": execution_success,
+        "execution_failure": execution_failure,
     })
     return MetricsRegistry(p).snapshot()
 

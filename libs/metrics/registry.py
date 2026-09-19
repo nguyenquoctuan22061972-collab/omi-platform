@@ -10,6 +10,11 @@ METRIC_NAMES = [
     "adapter_status",     # số adapter đang enabled+configured
     "dashboard_latency_ms",
     "health_summary",     # 1 = healthy, 0 = degraded
+    # PRD-012 A (additive) — bổ sung theo yêu cầu Phase 12 Module A:
+    "workflow_duration_ms",   # thời lượng chạy workflow gần nhất
+    "adapter_latency_ms",     # độ trễ adapter gần nhất
+    "execution_success",      # tổng lần chạy thành công
+    "execution_failure",      # tổng lần chạy thất bại
 ]
 
 
