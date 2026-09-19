@@ -55,5 +55,43 @@ class TestBackupVerify(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0)
 
 
+class TestBackupVolumeMode(unittest.TestCase):
+    """PG_VOLUME mode (Docker volume) — additive; filesystem mode giữ nguyên."""
+
+    BK = os.path.join(DEPLOY, "scripts", "backup.sh")
+
+    def test_syntax(self):
+        self.assertEqual(subprocess.run(["bash", "-n", self.BK]).returncode, 0)
+
+    def test_has_volume_branch_readonly(self):
+        s = open(self.BK, encoding="utf-8").read()
+        self.assertIn("PG_VOLUME", s)
+        self.assertIn(":ro", s)  # volume phải mount read-only
+        self.assertIn("docker volume inspect", s)
+
+    def test_filesystem_fallback_unchanged(self):
+        # PG_VOLUME rỗng → vẫn backup DATA_DIR như cũ.
+        with tempfile.TemporaryDirectory() as tmp:
+            data = os.path.join(tmp, "data")
+            os.makedirs(data)
+            open(os.path.join(data, "crm_core.db"), "wb").write(b"SQLite format 3\x00x")
+            bdir = os.path.join(tmp, "backups")
+            env = dict(os.environ, DATA_DIR=data, BACKUP_DIR=bdir, BACKUP_KEEP="14")
+            env.pop("PG_VOLUME", None)
+            r = subprocess.run(["bash", self.BK], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue([f for f in os.listdir(bdir) if f.endswith(".tar.gz")])
+
+    def test_volume_missing_fails_clearly(self):
+        # PG_VOLUME trỏ volume không tồn tại → lỗi rõ ràng, không im lặng.
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, BACKUP_DIR=os.path.join(tmp, "backups"),
+                       PG_VOLUME="omi_no_such_volume_xyz")
+            r = subprocess.run(["bash", self.BK], env=env, capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            # không docker hoặc volume thiếu — cả hai đều báo ERROR
+            self.assertIn("ERROR", r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
