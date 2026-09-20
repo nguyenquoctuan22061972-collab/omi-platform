@@ -1,0 +1,51 @@
+{
+  "info": {
+    "name": "WF004 — AI Call Intelligence",
+    "_postman_id": "wf004-ai-call-intelligence",
+    "description": "Trigger WF004 n8n webhook. Set {{base_url}} + {{webhook_path}} in variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://ycdtuo.ezn8n.com" },
+    { "key": "webhook_path", "value": "/webhook/wf004-call-intelligence" },
+    { "key": "webhook_test_path", "value": "/webhook-test/REPLACE-WITH-TEST-ID" }
+  ],
+  "item": [
+    {
+      "name": "01 Valid — audio_url (production)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{base_url}}{{webhook_path}}", "host": ["{{base_url}}{{webhook_path}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"audio_url\": \"https://example.com/sample-call.wav\",\n  \"contact\": { \"phone\": \"+84900000000\", \"email\": \"test@omi.local\" },\n  \"lang\": \"vi-VN\"\n}" }
+      }
+    },
+    {
+      "name": "02 Valid — with text",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{base_url}}{{webhook_path}}", "host": ["{{base_url}}{{webhook_path}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"audio_url\": \"https://example.com/sample-call.wav\",\n  \"contact\": { \"email\": \"lead@omi.local\" },\n  \"lang\": \"vi-VN\",\n  \"text\": \"Khach hoi gia goi Premium.\"\n}" }
+      }
+    },
+    {
+      "name": "03 Error — missing audio_url",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{base_url}}{{webhook_path}}", "host": ["{{base_url}}{{webhook_path}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"contact\": { \"phone\": \"+84900000000\" },\n  \"lang\": \"vi-VN\"\n}" }
+      }
+    },
+    {
+      "name": "04 Test endpoint (Listen for test event)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{base_url}}{{webhook_test_path}}", "host": ["{{base_url}}{{webhook_test_path}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"audio_url\": \"https://example.com/sample-call.wav\",\n  \"contact\": { \"phone\": \"+84900000000\" },\n  \"lang\": \"vi-VN\"\n}" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "name": "WF004 — AI Call Intelligence",
+  "folders": [],
+  "requests": [
+    {
+      "v": "1",
+      "name": "01 Valid — audio_url (production)",
+      "method": "POST",
+      "endpoint": "<<base_url>><<webhook_path>>",
+      "headers": [ { "key": "Content-Type", "value": "application/json", "active": true } ],
+      "params": [],
+      "body": { "contentType": "application/json", "body": "{\n  \"audio_url\": \"https://example.com/sample-call.wav\",\n  \"contact\": { \"phone\": \"+84900000000\", \"email\": \"test@omi.local\" },\n  \"lang\": \"vi-VN\"\n}" },
+      "auth": { "authType": "none", "authActive": false }
+    },
+    {
+      "v": "1",
+      "name": "02 Valid — with text",
+      "method": "POST",
+      "endpoint": "<<base_url>><<webhook_path>>",
+      "headers": [ { "key": "Content-Type", "value": "application/json", "active": true } ],
+      "params": [],
+      "body": { "contentType": "application/json", "body": "{\n  \"audio_url\": \"https://example.com/sample-call.wav\",\n  \"contact\": { \"email\": \"lead@omi.local\" },\n  \"lang\": \"vi-VN\",\n  \"text\": \"Khach hoi gia goi Premium.\"\n}" },
+      "auth": { "authType": "none", "authActive": false }
+    },
+    {
+      "v": "1",
+      "name": "03 Error — missing audio_url",
+      "method": "POST",
+      "endpoint": "<<base_url>><<webhook_path>>",
+      "headers": [ { "key": "Content-Type", "value": "application/json", "active": true } ],
+      "params": [],
+      "body": { "contentType": "application/json", "body": "{\n  \"contact\": { \"phone\": \"+84900000000\" },\n  \"lang\": \"vi-VN\"\n}" },
+      "auth": { "authType": "none", "authActive": false }
+    }
+  ]
+}
