@@ -11,7 +11,25 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "cfg-crm", "name": "crm_base", "value": "http://crm-core:8080", "type": "string" },
+            { "id": "cfg-stt", "name": "vertex_stt_url", "value": "", "type": "string" },
+            { "id": "cfg-sum", "name": "vertex_summary_url", "value": "", "type": "string" },
+            { "id": "cfg-tg", "name": "telegram_chat_id", "value": "", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [380, 300]
     },
     {
       "parameters": {
@@ -20,12 +38,12 @@
       "name": "Validation",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [420, 300]
+      "position": [580, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.VERTEX_STT_URL}}",
+        "url": "={{ $('Config').item.json.vertex_stt_url }}",
         "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
@@ -35,14 +53,14 @@
       "name": "Vertex STT",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [640, 300],
+      "position": [780, 300],
       "credentials": { "googleApi": { "id": "", "name": "Vertex STT (đặt trong n8n)" } },
       "disabled": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.VERTEX_SUMMARY_URL}}",
+        "url": "={{ $('Config').item.json.vertex_summary_url }}",
         "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
@@ -52,14 +70,14 @@
       "name": "AI Summary",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [860, 300],
+      "position": [980, 300],
       "credentials": { "googleApi": { "id": "", "name": "Vertex Summary (đặt trong n8n)" } },
       "disabled": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.CRM_BASE}}/conversations",
+        "url": "={{ $('Config').item.json.crm_base }}/conversations",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ contact: $json.contact, channel: 'call', summary: $json.summary, transcript: $json.transcript }) }}",
@@ -68,25 +86,25 @@
       "name": "CRM Update",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1080, 300]
+      "position": [1180, 300]
     },
     {
       "parameters": {
-        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
+        "chatId": "={{ $('Config').item.json.telegram_chat_id }}",
         "text": "={{ 'Call summary cho ' + ($json.contact.phone || $json.contact.email) + ':\\n' + $json.summary }}",
         "additionalFields": {}
       },
       "name": "Telegram Notify",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
-      "position": [1300, 300],
+      "position": [1380, 300],
       "credentials": { "telegramApi": { "id": "", "name": "Telegram (đặt trong n8n)" } },
       "disabled": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.CRM_BASE}}/audit",
+        "url": "={{ $('Config').item.json.crm_base }}/audit",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ event: 'workflow_activation', actor: 'WF004', target: 'call_intelligence', meta: { contact: $json.contact } }) }}",
@@ -95,12 +113,12 @@
       "name": "Audit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1520, 300]
+      "position": [1580, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.CRM_BASE}}/metrics/ingest",
+        "url": "={{ $('Config').item.json.crm_base }}/metrics/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ metric: 'workflow_count', workflow: 'WF004', value: 1 }) }}",
@@ -109,11 +127,12 @@
       "name": "Metrics",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1740, 300]
+      "position": [1780, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Validation", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Validation", "type": "main", "index": 0 }]] },
     "Validation": { "main": [[{ "node": "Vertex STT", "type": "main", "index": 0 }]] },
     "Vertex STT": { "main": [[{ "node": "AI Summary", "type": "main", "index": 0 }]] },
     "AI Summary": { "main": [[{ "node": "CRM Update", "type": "main", "index": 0 }]] },

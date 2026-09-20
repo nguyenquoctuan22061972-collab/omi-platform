@@ -1,14 +1,15 @@
-"""QA — WF004 AI Call Intelligence (WO-015). Kiểm tra tĩnh, không cần n8n.
+"""QA — WF004 AI Call Intelligence (WO-015 / WO-015C). Kiểm tra tĩnh, không cần n8n.
 
-Không đụng test_workflows.py (vẫn đúng 3 WF*/workflow.json). WF004 là file phẳng
-workflows/WF004.n8n.json → validate riêng ở đây.
+v2: bỏ $env (n8n chặn access to env vars) → dùng node 'Config' (Set) chứa base URL,
+downstream tham chiếu $('Config'). Token vẫn ở credential (node disabled). Secret env-only.
+Không đụng test_workflows.py (vẫn đúng 3 WF*/workflow.json). File phẳng WF004.n8n.json.
 """
 import json
 import os
 import unittest
 
 WF = os.path.join(os.path.dirname(__file__), "..", "WF004.n8n.json")
-EXPECTED_CHAIN = ["Webhook", "Validation", "Vertex STT", "AI Summary",
+EXPECTED_CHAIN = ["Webhook", "Config", "Validation", "Vertex STT", "AI Summary",
                   "CRM Update", "Telegram Notify", "Audit", "Metrics"]
 
 
@@ -40,22 +41,25 @@ class TestWF004(unittest.TestCase):
                     self.assertIn(link["node"], self.nodes, f"đích lạ: {link['node']}")
 
     def test_chain_order(self):
-        # chuỗi Webhook -> ... -> Metrics đúng thứ tự
         for a, b in zip(EXPECTED_CHAIN, EXPECTED_CHAIN[1:]):
             targets = [l["node"] for outs in self.wf["connections"][a]["main"] for l in outs]
             self.assertIn(b, targets, f"{a} phải nối {b}")
 
-    def test_env_only_urls(self):
+    def test_config_node_provides_bases(self):
+        cfg = self.nodes["Config"]
+        self.assertEqual(cfg["type"], "n8n-nodes-base.set")
+        names = {a["name"] for a in cfg["parameters"]["assignments"]["assignments"]}
+        self.assertEqual(names, {"crm_base", "vertex_stt_url", "vertex_summary_url", "telegram_chat_id"})
+
+    def test_no_env_access(self):
+        # $env bị n8n chặn → không được dùng ở bất kỳ đâu
+        self.assertNotIn("$env", json.dumps(self.wf))
+
+    def test_http_urls_from_config(self):
         for n in self.wf["nodes"]:
             if n["type"] == "n8n-nodes-base.httpRequest":
                 url = n["parameters"].get("url", "")
-                self.assertIn("$env.", url, f"{n['name']}: URL phải dùng $env")
-                self.assertNotIn("http://", url)
-                self.assertNotIn("https://", url)
-
-    def test_crm_nodes_use_crm_base(self):
-        for name in ("CRM Update", "Audit", "Metrics"):
-            self.assertIn("$env.CRM_BASE", self.nodes[name]["parameters"]["url"])
+                self.assertIn("$('Config')", url, f"{n['name']}: URL phải lấy từ node Config")
 
     def test_credential_nodes_disabled(self):
         for n in self.wf["nodes"]:
@@ -63,9 +67,12 @@ class TestWF004(unittest.TestCase):
                 self.assertTrue(n.get("disabled") is True,
                                 f"{n['name']} có credential nhưng chưa disabled")
 
-    def test_no_secret_literal(self):
-        blob = json.dumps(self.wf).lower()
-        for bad in ('password":', "token=", "bearer ", "api_key", "xoxb-", "secret_key"):
+    def test_no_secret_value(self):
+        # Không có GIÁ TRỊ secret (không chỉ là tên biến). crm_base nội bộ không phải secret.
+        import re
+        blob = json.dumps(self.wf)
+        self.assertIsNone(re.search(r'(?i)(secret|token|password|api[_-]?key|bearer)"?\s*[:=]\s*"[A-Za-z0-9/_+\-]{12,}"', blob))
+        for bad in ("xoxb-", "AIza", "sk-"):
             self.assertNotIn(bad, blob, f"nghi secret literal: {bad}")
 
 

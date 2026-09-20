@@ -1,36 +1,35 @@
-# WF004 — AI Call Intelligence · SOP (WO-015)
+# WF004 — AI Call Intelligence · SOP (WO-015 / WO-015C v2)
 
-Quy trình vận hành để **kích hoạt** WF004 (repo chỉ cung cấp file import; bật cần credential).
+**v2:** bỏ `$env` (n8n chặn "access to env vars"). Base URL nằm trong node **Config** — sửa
+1 lần trong UI. Token vẫn ở credential. Repo chỉ cung cấp file import.
 
 ## A. Import workflow
-1. n8n → Workflows → Import from File → chọn `workflows/WF004.n8n.json`.
-2. Kiểm tra 8 node đúng chuỗi Webhook→…→Metrics.
+1. n8n → Workflows → Import from File → `workflows/WF004.n8n.json`.
+2. Thấy 9 node: Webhook → **Config** → Validation → Vertex STT → AI Summary → CRM Update → Telegram Notify → Audit → Metrics.
 
-## B. Gắn credential (ngoài repo — external)
-1. Vertex STT + AI Summary: tạo credential `Google API` (service account) → gán vào 2 node, **bật** node.
-2. Telegram Notify: tạo credential `Telegram API` (bot token) → gán → **bật** node.
+## B. Sửa node Config (1 lần, không secret)
+Mở **Config** → điền:
+- `crm_base` = `http://crm-core:8080` (đã điền sẵn; đổi nếu n8n không cùng network với crm-core).
+- `vertex_stt_url` = endpoint Vertex Speech-to-Text.
+- `vertex_summary_url` = endpoint Vertex summary/LLM.
+- `telegram_chat_id` = chat id nhận thông báo.
 
-## C. Đặt biến môi trường (deploy/.env trên VPS — KHÔNG commit)
-```
-CRM_BASE=...              # nội bộ, vd http://crm-core:8080
-VERTEX_STT_URL=...
-VERTEX_SUMMARY_URL=...
-TELEGRAM_CHAT_ID=...
-```
+## C. Gắn credential (ngoài repo — external)
+1. Vertex STT + AI Summary → credential **Google API** (service account) → **bật** 2 node.
+2. Telegram Notify → credential **Telegram API** (bot token) → **bật** node.
 
-## D. Kích hoạt
-1. Bật 3 node disabled sau khi đã có credential.
-2. Activate workflow. Lấy webhook URL production.
-
-## E. Kiểm thử vận hành
+## D. Kích hoạt & test
+1. Save → Activate. Webhook production: `POST /webhook/wf004-call-intelligence`.
+2. Test:
 ```
 POST https://<n8n>/webhook/wf004-call-intelligence
 { "audio_url": "https://.../call.wav", "contact": { "phone": "+8490..." }, "lang": "vi-VN" }
 ```
-Kỳ vọng: CRM có conversation mới (channel=call) + Telegram nhận summary + audit ghi + metric tăng.
+Kỳ vọng: CRM có conversation (channel=call) + Telegram nhận summary + Audit ghi + Metrics tăng.
 
-## F. Rollback
-- Deactivate workflow trong n8n (không xoá file). Không ảnh hưởng WF001/002/050.
+## E. Rollback
+Deactivate workflow (không xoá file). Không ảnh hưởng WF001/002/050.
 
-## G. Bảo mật
-- Không dán token vào JSON hay chat. Credential chỉ nằm trong n8n; biến trong `deploy/.env` (gitignored).
+## F. Bảo mật
+- Không secret trong JSON. Token chỉ trong credential n8n. `crm_base` là DNS nội bộ, không phải secret.
+- Cách thay thế (nếu muốn giữ `$env`): đặt `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` trên VPS rồi restart n8n.
