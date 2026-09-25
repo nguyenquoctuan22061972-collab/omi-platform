@@ -10,7 +10,8 @@
         "assignments": { "assignments": [
           { "id": "cfg-crm", "name": "crm_base", "value": "http://crm-core:8080", "type": "string" },
           { "id": "cfg-oaid", "name": "zalo_oa_id", "value": "", "type": "string" },
-          { "id": "cfg-send", "name": "zalo_send_url", "value": "https://openapi.zalo.me/v3.0/oa/message", "type": "string" }
+          { "id": "cfg-send", "name": "zalo_send_url", "value": "https://openapi.zalo.me/v3.0/oa/message", "type": "string" },
+          { "id": "cfg-rl", "name": "rate_limit_per_min", "value": "60", "type": "string" }
         ] },
         "includeOtherFields": true, "options": {}
       },
@@ -18,18 +19,24 @@
     },
     {
       "parameters": {
-        "functionCode": "// Parse Zalo OA webhook: user_id + text. Không log secret.\nconst b = ($json.body) || $json;\nconst uid = (b.sender && b.sender.id) || b.user_id;\nconst text = (b.message && b.message.text) || '';\nif (!uid || !text) { throw new Error('WF005: thiếu sender.id/message.text'); }\nreturn [{ json: { user_id: uid, text: text, received_at: new Date().toISOString() } }];"
+        "functionCode": "// Parse + idempotency key. Không log secret.\nconst b = ($json.body) || $json;\nconst uid = (b.sender && b.sender.id) || b.user_id;\nconst text = (b.message && b.message.text) || '';\nif (!uid || !text) { throw new Error('WF005: thiếu sender.id/message.text'); }\n// idempotency: ưu tiên msg_id của Zalo; fallback hash uid+text+minute (chống double-delivery).\nconst msgId = (b.message && b.message.msg_id) || '';\nconst minute = new Date().toISOString().slice(0,16);\nconst idem = msgId || (uid + ':' + text + ':' + minute);\nreturn [{ json: { user_id: uid, text: text, event_id: idem, received_at: new Date().toISOString() } }];"
       },
       "name": "Parse", "type": "n8n-nodes-base.function", "typeVersion": 1, "position": [580, 300]
     },
     {
       "parameters": {
         "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/conversations",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Prefer", "value": "resolution=merge-duplicates" },
+          { "name": "Idempotency-Key", "value": "={{ $json.event_id }}" }
+        ] },
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contact: { zalo_user_id: $json.user_id }, channel: 'zalo', message: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ event_id: $json.event_id, contact: { zalo_user_id: $json.user_id }, channel: 'zalo', message: $json.text }) }}",
         "options": {}
       },
-      "name": "CRM Update", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [780, 300]
+      "name": "CRM Update", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [780, 300],
+      "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 1500
     },
     {
       "parameters": {
@@ -40,27 +47,32 @@
         "options": {}
       },
       "name": "AI Reply", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [980, 300],
+      "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 1500,
       "credentials": { "googleApi": { "id": "", "name": "AI Provider (đặt trong n8n)" } }, "disabled": true
     },
     {
       "parameters": {
         "method": "POST", "url": "={{ $('Config').item.json.zalo_send_url }}",
         "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "Idempotency-Key", "value": "={{ $json.event_id }}" } ] },
         "sendBody": true, "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ recipient: { user_id: $json.user_id }, message: { text: $json.reply || $json.text } }) }}",
         "options": {}
       },
       "name": "Zalo Reply", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1180, 300],
+      "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 2000,
       "credentials": { "httpHeaderAuth": { "id": "", "name": "Zalo access_token header (đặt trong n8n)" } }, "disabled": true
     },
     {
       "parameters": {
         "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/audit",
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ event: 'workflow_activation', actor: 'WF005', target: 'zalo_oa', meta: { user_id: $json.user_id } }) }}",
+        "jsonBody": "={{ JSON.stringify({ event: 'workflow_activation', actor: 'WF005', target: 'zalo_oa', meta: { user_id: $json.user_id, event_id: $json.event_id } }) }}",
         "options": {}
       },
-      "name": "Audit", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1380, 300]
+      "name": "Audit", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1380, 300],
+      "retryOnFail": true, "maxTries": 2, "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -69,7 +81,8 @@
         "jsonBody": "={{ JSON.stringify({ metric: 'workflow_count', workflow: 'WF005', value: 1 }) }}",
         "options": {}
       },
-      "name": "Metrics", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1580, 300]
+      "name": "Metrics", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1580, 300],
+      "retryOnFail": true, "maxTries": 2, "waitBetweenTries": 1000
     }
   ],
   "connections": {
@@ -83,5 +96,5 @@
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "tags": ["WF005", "zalo-oa", "additive"]
+  "tags": ["WF005", "zalo-oa", "additive", "hardened"]
 }

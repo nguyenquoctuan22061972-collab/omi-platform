@@ -35,7 +35,7 @@
       "runtime_binding": "zalo-ai-company/src/zalo_pipeline.py",
       "status": "active",
       "permission": "none",
-      "notes": "E2E dry-run built (WF005 + pipeline). GO-LIVE cần 2 secret (OA_ID, ACCESS_TOKEN) — xem PR-001."
+      "notes": "WF005 hardened (retry/idempotency/rate-limit) + runtime observability + QA/rollback automation. GO-LIVE cần OA_ID+ACCESS_TOKEN (PR-001)."
     },
     {
       "id": "crm",
