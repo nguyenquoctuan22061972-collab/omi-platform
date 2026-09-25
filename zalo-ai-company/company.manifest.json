@@ -24,7 +24,7 @@
       "runtime_binding": "orchestrator/runtime",
       "status": "blocked",
       "permission": "P0",
-      "notes": "Điều phối build; thực thi VPS/n8n cần quyền ngoài."
+      "notes": "CEO Console (PWA + Command API /status /report /build /fix /deploy + Health Monitor) built offline. Deploy live cần PR-002 (egress/VPS)."
     },
     {
       "id": "zalo",
@@ -156,5 +156,11 @@
       "need": "Telegram bot token / SMTP creds",
       "blocks": "alert live (đang dry-run)"
     }
-  ]
+  ],
+  "ceo_console": {
+    "pwa": "zalo-ai-company/ceo-console/pwa",
+    "api": "zalo-ai-company/ceo-console/src/console_api.py",
+    "status": "built_offline",
+    "live_needs": "PR-002"
+  }
 }

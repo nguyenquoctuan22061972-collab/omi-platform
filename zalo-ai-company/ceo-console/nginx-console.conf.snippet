@@ -1,0 +1,12 @@
+# CEO Console — additive nginx snippet (KHÔNG tự wire vào omi.conf). Kích hoạt thủ công khi deploy.
+# PWA tĩnh:
+location /ceo/ {
+    alias /opt/omi-platform/zalo-ai-company/ceo-console/pwa/;
+    try_files $uri $uri/ /ceo/index.html;
+}
+# Command API (console_api create_server :8090) — same-origin cho PWA:
+location ~ ^/(status|report|build|fix|deploy|health)$ {
+    proxy_pass http://ceo-console:8090;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
