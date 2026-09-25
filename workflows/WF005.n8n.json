@@ -1,0 +1,87 @@
+{
+  "name": "WF005 — Zalo OA Assistant",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "wf005-zalo-inbound", "responseMode": "onReceived", "options": {} },
+      "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "assignments": { "assignments": [
+          { "id": "cfg-crm", "name": "crm_base", "value": "http://crm-core:8080", "type": "string" },
+          { "id": "cfg-oaid", "name": "zalo_oa_id", "value": "", "type": "string" },
+          { "id": "cfg-send", "name": "zalo_send_url", "value": "https://openapi.zalo.me/v3.0/oa/message", "type": "string" }
+        ] },
+        "includeOtherFields": true, "options": {}
+      },
+      "name": "Config", "type": "n8n-nodes-base.set", "typeVersion": 3.4, "position": [380, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse Zalo OA webhook: user_id + text. Không log secret.\nconst b = ($json.body) || $json;\nconst uid = (b.sender && b.sender.id) || b.user_id;\nconst text = (b.message && b.message.text) || '';\nif (!uid || !text) { throw new Error('WF005: thiếu sender.id/message.text'); }\nreturn [{ json: { user_id: uid, text: text, received_at: new Date().toISOString() } }];"
+      },
+      "name": "Parse", "type": "n8n-nodes-base.function", "typeVersion": 1, "position": [580, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/conversations",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact: { zalo_user_id: $json.user_id }, channel: 'zalo', message: $json.text }) }}",
+        "options": {}
+      },
+      "name": "CRM Update", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/ai/reply",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prompt: $json.text, task: 'zalo_reply' }) }}",
+        "options": {}
+      },
+      "name": "AI Reply", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [980, 300],
+      "credentials": { "googleApi": { "id": "", "name": "AI Provider (đặt trong n8n)" } }, "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.zalo_send_url }}",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { user_id: $json.user_id }, message: { text: $json.reply || $json.text } }) }}",
+        "options": {}
+      },
+      "name": "Zalo Reply", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1180, 300],
+      "credentials": { "httpHeaderAuth": { "id": "", "name": "Zalo access_token header (đặt trong n8n)" } }, "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/audit",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ event: 'workflow_activation', actor: 'WF005', target: 'zalo_oa', meta: { user_id: $json.user_id } }) }}",
+        "options": {}
+      },
+      "name": "Audit", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1380, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.crm_base }}/metrics/ingest",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ metric: 'workflow_count', workflow: 'WF005', value: 1 }) }}",
+        "options": {}
+      },
+      "name": "Metrics", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1580, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "CRM Update", "type": "main", "index": 0 }]] },
+    "CRM Update": { "main": [[{ "node": "AI Reply", "type": "main", "index": 0 }]] },
+    "AI Reply": { "main": [[{ "node": "Zalo Reply", "type": "main", "index": 0 }]] },
+    "Zalo Reply": { "main": [[{ "node": "Audit", "type": "main", "index": 0 }]] },
+    "Audit": { "main": [[{ "node": "Metrics", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["WF005", "zalo-oa", "additive"]
+}

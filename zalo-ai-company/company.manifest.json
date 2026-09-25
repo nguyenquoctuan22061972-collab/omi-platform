@@ -32,10 +32,10 @@
       "stack": [
         "Zalo OA API"
       ],
-      "runtime_binding": "libs/integrations/zalo_oa.py",
-      "status": "blocked",
-      "permission": "P0",
-      "notes": "Cần OA id + access token."
+      "runtime_binding": "zalo-ai-company/src/zalo_pipeline.py",
+      "status": "active",
+      "permission": "none",
+      "notes": "E2E dry-run built (WF005 + pipeline). GO-LIVE cần 2 secret (OA_ID, ACCESS_TOKEN) — xem PR-001."
     },
     {
       "id": "crm",
