@@ -46,7 +46,7 @@
       "runtime_binding": "apps/crm-core",
       "status": "degraded",
       "permission": "P1",
-      "notes": "Hiện SQLite; migrate Supabase cần URL + service key."
+      "notes": "Migration package Supabase sẵn (schema/RLS/seed/planner/bindings). GO-LIVE cần SUPABASE_URL + service_role (PR-003). Vẫn chạy SQLite tới khi migrate."
     },
     {
       "id": "vault",
