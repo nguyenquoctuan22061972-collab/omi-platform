@@ -1,0 +1,160 @@
+{
+  "project": "ZALO AI COMPANY",
+  "version": "1.0",
+  "architecture": "production",
+  "roles": {
+    "cto": "ChatGPT",
+    "builder_orchestrator": "Claude"
+  },
+  "principles": [
+    "analyze-build-qa-pass",
+    "additive-only",
+    "no-per-node-edit",
+    "secret-env-only"
+  ],
+  "departments": [
+    {
+      "id": "engineering",
+      "name": "Engineering",
+      "stack": [
+        "n8n",
+        "VPS",
+        "Docker"
+      ],
+      "runtime_binding": "orchestrator/runtime",
+      "status": "blocked",
+      "permission": "P0",
+      "notes": "Điều phối build; thực thi VPS/n8n cần quyền ngoài."
+    },
+    {
+      "id": "zalo",
+      "name": "Zalo Platform",
+      "stack": [
+        "Zalo OA API"
+      ],
+      "runtime_binding": "libs/integrations/zalo_oa.py",
+      "status": "blocked",
+      "permission": "P0",
+      "notes": "Cần OA id + access token."
+    },
+    {
+      "id": "crm",
+      "name": "CRM",
+      "stack": [
+        "Supabase"
+      ],
+      "runtime_binding": "apps/crm-core",
+      "status": "degraded",
+      "permission": "P1",
+      "notes": "Hiện SQLite; migrate Supabase cần URL + service key."
+    },
+    {
+      "id": "vault",
+      "name": "Company Vault",
+      "stack": [
+        "Google Drive",
+        "RAG"
+      ],
+      "runtime_binding": "libs/prompts",
+      "status": "blocked",
+      "permission": "P1",
+      "notes": "Cần Google Drive OAuth + vector store."
+    },
+    {
+      "id": "sales",
+      "name": "Sales",
+      "stack": [
+        "CRM",
+        "lead-engine"
+      ],
+      "runtime_binding": "libs/lead/engine.py",
+      "status": "active",
+      "permission": "none"
+    },
+    {
+      "id": "content",
+      "name": "Content Factory",
+      "stack": [
+        "AI",
+        "n8n",
+        "publish"
+      ],
+      "runtime_binding": "apps/content-factory",
+      "status": "active",
+      "permission": "none"
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "stack": [
+        "audit",
+        "rbac",
+        "secret-scan"
+      ],
+      "runtime_binding": "libs/audit",
+      "status": "active",
+      "permission": "none"
+    },
+    {
+      "id": "qa",
+      "name": "QA",
+      "stack": [
+        "unittest",
+        "validators"
+      ],
+      "runtime_binding": ".github/workflows/ci.yml",
+      "status": "active",
+      "permission": "none"
+    },
+    {
+      "id": "monitoring",
+      "name": "Monitoring",
+      "stack": [
+        "metrics",
+        "alerts",
+        "health"
+      ],
+      "runtime_binding": "apps/runtime-health",
+      "status": "active",
+      "permission": "P2",
+      "notes": "Alert live cần Telegram/SMTP token (đang dry-run)."
+    }
+  ],
+  "permission_requests": [
+    {
+      "id": "PR-001",
+      "priority": "P0",
+      "dept": "zalo",
+      "need": "Zalo OA id + access token",
+      "blocks": "mọi tác vụ Zalo"
+    },
+    {
+      "id": "PR-002",
+      "priority": "P0",
+      "dept": "engineering",
+      "need": "Kênh thực thi VPS/n8n từ session (hiện egress 403)",
+      "blocks": "auto-deploy, gọi n8n"
+    },
+    {
+      "id": "PR-003",
+      "priority": "P1",
+      "dept": "crm",
+      "need": "Supabase URL + service_role key",
+      "blocks": "CRM trên Supabase"
+    },
+    {
+      "id": "PR-004",
+      "priority": "P1",
+      "dept": "vault",
+      "need": "Google Drive OAuth + vector store",
+      "blocks": "RAG Company Vault"
+    },
+    {
+      "id": "PR-005",
+      "priority": "P2",
+      "dept": "monitoring",
+      "need": "Telegram bot token / SMTP creds",
+      "blocks": "alert live (đang dry-run)"
+    }
+  ]
+}
