@@ -55,10 +55,10 @@
         "Google Drive",
         "RAG"
       ],
-      "runtime_binding": "libs/prompts",
-      "status": "blocked",
+      "runtime_binding": "zalo-ai-company/vault/src/rag.py",
+      "status": "active",
       "permission": "P1",
-      "notes": "Cần Google Drive OAuth + vector store."
+      "notes": "RAG offline (keyword) built + tested. Nâng cấp embeddings/Google Drive cần env (PR-004)."
     },
     {
       "id": "sales",

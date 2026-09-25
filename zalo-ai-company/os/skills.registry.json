@@ -1,0 +1,8 @@
+{ "capacity": 400, "skills": [
+  { "id": "sk-sales-quote", "name": "Sales Quote", "category": "sales", "handler_ref": "libs/lead/engine.py" },
+  { "id": "sk-support-triage", "name": "Support Triage", "category": "support", "handler_ref": "apps/crm-core" },
+  { "id": "sk-content-write", "name": "Content Writer", "category": "content", "handler_ref": "apps/content-factory" },
+  { "id": "sk-ai-summary", "name": "AI Summary", "category": "ai", "handler_ref": "libs/ai_router/router.py" },
+  { "id": "sk-zalo-send", "name": "Zalo Send", "category": "messaging", "handler_ref": "libs/integrations/zalo_oa.py" },
+  { "id": "sk-rag-search", "name": "Vault RAG Search", "category": "vault", "handler_ref": "zalo-ai-company/vault/src/rag.py" }
+] }

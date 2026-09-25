@@ -1,0 +1,11 @@
+{ "capacity": 800, "agents": [
+  { "id": "ag-eng-01", "department": "engineering", "tier": "orchestrator", "capabilities": ["build","deploy"] },
+  { "id": "ag-zalo-01", "department": "zalo", "tier": "worker", "capabilities": ["zalo_reply","messaging"] },
+  { "id": "ag-crm-01", "department": "crm", "tier": "worker", "capabilities": ["crm_upsert","support"] },
+  { "id": "ag-vault-01", "department": "vault", "tier": "worker", "capabilities": ["rag_search"] },
+  { "id": "ag-sales-01", "department": "sales", "tier": "worker", "capabilities": ["lead_qualify","sales"] },
+  { "id": "ag-content-01", "department": "content", "tier": "worker", "capabilities": ["content_write"] },
+  { "id": "ag-sec-01", "department": "security", "tier": "supervisor", "capabilities": ["audit","secret_scan"] },
+  { "id": "ag-qa-01", "department": "qa", "tier": "supervisor", "capabilities": ["run_tests"] },
+  { "id": "ag-mon-01", "department": "monitoring", "tier": "worker", "capabilities": ["metrics","alert"] }
+] }
