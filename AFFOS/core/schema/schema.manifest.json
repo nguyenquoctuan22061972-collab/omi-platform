@@ -1,0 +1,32 @@
+{
+  "schema": "affos_core",
+  "version": "0.1",
+  "tables": [
+    "affiliate_networks",
+    "merchants",
+    "products",
+    "offers",
+    "channels",
+    "content",
+    "campaigns",
+    "tracking_links",
+    "click_events",
+    "conversion_events",
+    "commissions",
+    "expenses",
+    "revenue",
+    "customers",
+    "experiments",
+    "opportunities",
+    "agent_registry",
+    "skill_registry",
+    "agent_runs",
+    "audit_logs",
+    "system_events"
+  ],
+  "count": 21,
+  "migrations": [
+    "0001_affos_core.sql",
+    "0002_rls.sql"
+  ]
+}
