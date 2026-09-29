@@ -1,0 +1,11 @@
+{ "skills": [
+  { "id": "sk-market-read", "name": "Market Read", "version": "1.0", "description": "Read market/demand data",
+    "required_tools": ["market_api"], "input_schema": {"query":"string"}, "output_schema": {"demand":"number"},
+    "cost": 0.02, "permission": "read", "status": "active" },
+  { "id": "sk-offer-read", "name": "Offer Read", "version": "1.0", "description": "Read affiliate offers",
+    "required_tools": ["affiliate_api"], "input_schema": {"product_id":"string"}, "output_schema": {"commission":"number"},
+    "cost": 0.01, "permission": "read", "status": "active" },
+  { "id": "sk-opportunity-create", "name": "Opportunity Create", "version": "1.0", "description": "Create scored opportunity",
+    "required_tools": ["db"], "input_schema": {"score":"number"}, "output_schema": {"opportunity_id":"string"},
+    "cost": 0.0, "permission": "write", "status": "active" }
+] }

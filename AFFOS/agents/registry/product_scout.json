@@ -1,0 +1,20 @@
+{
+  "id": "AGENT-PRODUCT-001",
+  "name": "Product Scout",
+  "role": "research",
+  "version": "1.0",
+  "mission": "Find high-potential affiliate products.",
+  "input": ["market_data", "offers"],
+  "output": ["opportunities"],
+  "skills": ["sk-market-read", "sk-offer-read", "sk-opportunity-create"],
+  "permissions": {
+    "can": ["read_market_data", "read_offers", "create_opportunities"],
+    "cannot": ["spend_money", "publish_content", "change_architecture", "modify_financial_rules"]
+  },
+  "cost_limit": 1.0,
+  "kpi": "opportunities_per_day",
+  "owner": "CTO",
+  "status": "active",
+  "last_run": "",
+  "failure_count": 0
+}
