@@ -1,0 +1,3 @@
+# AFFOS · tests
+
+Skeleton.

@@ -1,0 +1,3 @@
+# AFFOS · docs
+
+Skeleton.
