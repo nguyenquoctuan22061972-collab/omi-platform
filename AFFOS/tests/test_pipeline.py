@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(ROOT, "core", "attribution"))
 sys.path.insert(0, os.path.join(ROOT, "connectors", "affiliate-network"))
 from data_access import Repo, CHAIN_TABLES  # noqa: E402
 import attribution                          # noqa: E402
-from connector import AffiliateNetworkConnector  # noqa: E402
+from affiliate_network_connector import AffiliateNetworkConnector  # noqa: E402
 import pipeline                             # noqa: E402
 
 

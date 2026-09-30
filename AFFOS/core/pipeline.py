@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(_CORE, "attribution"))
 sys.path.insert(0, os.path.join(_CORE, "..", "connectors", "affiliate-network"))
 from data_access import Repo            # noqa: E402
 import attribution                      # noqa: E402
-from connector import AffiliateNetworkConnector  # noqa: E402
+from affiliate_network_connector import AffiliateNetworkConnector  # noqa: E402
 
 
 def _ts():
@@ -26,15 +26,19 @@ def _ts():
 
 
 def run(events: Optional[List[Dict]] = None, env: Optional[Dict] = None,
-        costs: Optional[Dict] = None) -> Dict:
+        costs: Optional[Dict] = None, connector=None) -> Dict:
     """events: [{product_id, clicks:int, conversions:[order_value,...]}] — nguồn dữ liệu.
     Nếu None → seed demo. Trả attribution + profit + data_source."""
     env = env or {}
     costs = costs or {}
     repo = Repo()
-    conn = AffiliateNetworkConnector(env)
+    conn = connector if connector is not None else AffiliateNetworkConnector(env)
     ing = conn.ingest(repo)
 
+    if events is None and hasattr(conn, 'fetch_report'):
+        rep = conn.fetch_report()
+        if rep:
+            events = rep
     events = events if events is not None else [
         {"product_id": "MP-1", "clicks": 50, "conversions": [4990000, 4990000]},
         {"product_id": "MP-2", "clicks": 30, "conversions": [890000]},
