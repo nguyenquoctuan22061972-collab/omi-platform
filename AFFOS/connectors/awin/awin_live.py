@@ -1,13 +1,18 @@
-"""AWIN LIVE chain (PRD-017 / CTO review). Scaffold thực thi:
-AUTH → PUBLISHER VERIFY → REAL OFFER → REAL DEEP LINK → REAL TRACKING → REAL TRANSACTION
-→ REAL COMMISSION → REAL REVENUE → REAL CONTRIBUTION PROFIT.
+"""AWIN LIVE adapter (PRD-017 / CTO AWIN LIVE IMPLEMENTATION).
 
-Nguyên tắc kinh tế-thật (CTO): record chỉ PRODUCTION_VERIFIED + is_verified khi đến từ
-ProductionTransport (gọi api.awin.com thật với credential thật). FakeTransport (test) KHÔNG
-BAO GIỜ tạo REAL — record gắn data_state='TEST'. Không có credential → mỗi bước 'blocked'.
+Real production HTTP transport + auth (env secrets only) + offer/transaction retrieval.
+Economic-truth guards:
+  - ProductionTransport calls api.awin.com over HTTPS (urllib). It NEVER returns seed data.
+  - FakeTransport (tests) is fully isolated; is_production=False → records stamped TEST, never REAL.
+  - Failures stay explicit (auth/permission/http/network/empty) and remain NON-REAL.
+  - Production records: data_state=PRODUCTION_VERIFIED + is_verified ONLY from a production
+    transport, with explicit currency (never assumed VND), persisted ONLY via a LIVE
+    (Postgres) repository — SQLite is refused for production writes.
+No secret is printed, logged, or returned.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from typing import Dict, List, Mapping, Optional
@@ -19,6 +24,24 @@ import provenance  # noqa: E402
 AWIN_BASE = "https://api.awin.com"
 AWIN_CREAD = "https://www.awin1.com/cread.php"
 
+# Awin commissionStatus → normalized transaction_status (only APPROVED is realizable downstream).
+STATUS_MAP = {
+    "pending": "PENDING", "approved": "APPROVED", "confirmed": "APPROVED",
+    "declined": "DECLINED", "rejected": "DECLINED",
+    "cancelled": "CANCELLED", "canceled": "CANCELLED", "deleted": "CANCELLED",
+    "refunded": "REFUNDED",
+}
+SQLITE_STATES = {"TEST", "DRY_RUN", "SEEDED"}
+
+
+class AwinError(RuntimeError): pass
+class AwinAuthError(AwinError): pass
+class AwinPermissionError(AwinError): pass
+class AwinHTTPError(AwinError): pass
+class AwinNetworkError(AwinError): pass
+class AwinCurrencyError(AwinError): pass
+class ProductionStorageError(AwinError): pass
+
 
 class Transport:
     is_production = False
@@ -27,26 +50,41 @@ class Transport:
 
 
 class ProductionTransport(Transport):
-    """Gọi API Awin thật qua HTTPS. is_production=True → record có thể là REAL.
-    (Chạy thật cần egress + credential — PR-005/PR-002.)"""
+    """Real Awin Publisher API over HTTPS. Requires egress + token. NEVER returns seed."""
     is_production = True
 
-    def get(self, url: str, token: str) -> Dict:  # pragma: no cover - cần mạng thật
-        import json
+    def get(self, url: str, token: str) -> Dict:
+        import urllib.error
         import urllib.request
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read().decode())
+        if not token:
+            raise AwinAuthError("missing token")
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {token}", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                body = r.read().decode()
+        except urllib.error.HTTPError as e:
+            if e.code in (401,):
+                raise AwinAuthError(f"auth failed HTTP {e.code}") from None
+            if e.code in (403,):
+                raise AwinPermissionError(f"permission denied HTTP {e.code}") from None
+            raise AwinHTTPError(f"HTTP {e.code}") from None
+        except urllib.error.URLError as e:
+            raise AwinNetworkError(f"network error: {e.reason}") from None
+        try:
+            return json.loads(body)
+        except Exception:
+            raise AwinHTTPError("non-JSON production response") from None
 
 
 class AwinLiveClient:
     def __init__(self, env: Optional[Mapping[str, str]] = None, transport: Optional[Transport] = None):
         self.env = dict(env or {})
-        self.transport = transport      # None → chưa có transport (blocked)
+        self.transport = transport
         self.token = self.env.get("AWIN_API_TOKEN", "")
         self.pid = self.env.get("AWIN_PUBLISHER_ID", "")
 
-    # ---- 1. AUTH ----
+    # ---- 1. AUTH / 2. PUBLISHER VERIFY ----
     def auth(self) -> Dict:
         if not self.token:
             return {"step": "auth", "ok": False, "blocked": "AWIN_API_TOKEN (PR-005)"}
@@ -54,38 +92,51 @@ class AwinLiveClient:
             return {"step": "auth", "ok": False, "blocked": "transport (egress/PR-002)"}
         return {"step": "auth", "ok": True}
 
-    # ---- 2. PUBLISHER VERIFY ----
     def publisher_verify(self) -> Dict:
         if not self.pid:
             return {"step": "publisher_verify", "ok": False, "blocked": "AWIN_PUBLISHER_ID (PR-005)"}
         return {"step": "publisher_verify", "ok": True, "publisher_id": self.pid}
 
     def _ready(self) -> bool:
-        return self.auth().get("ok") and self.publisher_verify().get("ok")
+        return bool(self.auth().get("ok") and self.publisher_verify().get("ok"))
+
+    def _is_production(self) -> bool:
+        return bool(self.transport and self.transport.is_production)
 
     def _state(self) -> str:
-        # REAL chỉ khi transport production + sẵn sàng; ngược lại TEST (không real).
-        if self._ready() and self.transport and self.transport.is_production:
-            return "PRODUCTION_VERIFIED"
-        return "TEST"
+        return "PRODUCTION_VERIFIED" if (self._ready() and self._is_production()) else "TEST"
 
     def _source(self) -> str:
         return "awin_production" if self._state() == "PRODUCTION_VERIFIED" else "awin_fake_test"
 
-    def _prov(self, rid: str) -> Dict:
+    def _prov(self, rid: str, currency: str = "") -> Dict:
         st = self._state()
-        return provenance.provenance(self._source(), rid, st, is_verified=(st == "PRODUCTION_VERIFIED"))
+        if st == "PRODUCTION_VERIFIED" and not currency:
+            raise AwinCurrencyError(f"production record {rid} thiếu currency (không mặc định VND)")
+        cur = currency or "VND"   # VND fallback CHỈ cho TEST; production đã raise ở trên
+        return provenance.provenance(self._source(), rid, st, currency=cur,
+                                     is_verified=(st == "PRODUCTION_VERIFIED"))
+
+    def _guard_repo_for_production(self, repo) -> None:
+        if self._state() == "PRODUCTION_VERIFIED" and getattr(repo, "data_state", None) in SQLITE_STATES:
+            raise ProductionStorageError("production data phải ghi vào Postgres (LIVE), không SQLite")
 
     # ---- 3. REAL OFFER ----
     def get_offers(self) -> Dict:
         if not self._ready():
             return {"step": "offers", "ok": False, "blocked": "auth/publisher"}
-        data = self.transport.get(f"{AWIN_BASE}/publishers/{self.pid}/programmes/?relationship=joined", self.token)
-        offers = [{"id": f"OF-{p['id']}", "product_id": str(p["id"]), "commission_rate": p.get("commissionRate", 0),
-                   **self._prov(str(p["id"]))} for p in data.get("programmes", data if isinstance(data, list) else [])]
-        return {"step": "offers", "ok": True, "offers": offers}
+        data = self.transport.get(
+            f"{AWIN_BASE}/publishers/{self.pid}/programmes/?relationship=joined", self.token)
+        progs = data.get("programmes", data if isinstance(data, list) else [])
+        offers = []
+        for p in progs:
+            cur = p.get("currencyCode", "")
+            offers.append({"id": f"OF-{p.get('id')}", "product_id": str(p.get("id")),
+                           "commission_rate": p.get("commissionRate", 0),
+                           **self._prov(str(p.get("id")), currency=cur)})
+        return {"step": "offers", "ok": True, "offers": offers, "count": len(offers)}
 
-    # ---- 4. REAL DEEP LINK (pure, deterministic) ----
+    # ---- 4. REAL DEEP LINK ----
     def deep_link(self, merchant_id: str, target_url: str, clickref: str) -> str:
         return (f"{AWIN_CREAD}?awinmid={merchant_id}&awinaffid={self.pid}"
                 f"&clickref={quote(clickref)}&ued={quote(target_url, safe='')}")
@@ -94,29 +145,40 @@ class AwinLiveClient:
     def ingest_transactions(self, repo, start: str, end: str) -> Dict:
         if not self._ready():
             return {"step": "transactions", "ok": False, "blocked": "auth/publisher"}
-        url = f"{AWIN_BASE}/publishers/{self.pid}/transactions/?startDate={start}&endDate={end}&timezone=UTC"
+        self._guard_repo_for_production(repo)
+        url = (f"{AWIN_BASE}/publishers/{self.pid}/transactions/"
+               f"?startDate={start}&endDate={end}&timezone=UTC")
         data = self.transport.get(url, self.token)
         txns = data.get("transactions", data if isinstance(data, list) else [])
         n = 0
         for t in txns:
             tid = str(t.get("id"))
-            cv = f"CV-{tid}"; ce = f"CE-{tid}"
+            sale = t.get("saleAmount") or {}
+            comm = t.get("commissionAmount") or {}
+            currency = (sale.get("currency") if isinstance(sale, dict) else "") or \
+                       (comm.get("currency") if isinstance(comm, dict) else "")
+            order_value = sale.get("amount", 0) if isinstance(sale, dict) else (sale or 0)
+            comm_amount = comm.get("amount", 0) if isinstance(comm, dict) else (comm or 0)
+            status = STATUS_MAP.get(str(t.get("commissionStatus", "")).lower(), "PENDING")
+            ce, cv = f"CE-{tid}", f"CV-{tid}"
             repo.insert("click_events", {"id": ce, "tracking_link_id": "", "ts": t.get("clickDate", ""),
-                        "event_subtype": provenance.click_type(self._state(), network_reported=True), **self._prov(ce)})
-            repo.insert("conversion_events", {"id": cv, "click_event_id": ce, "offer_id": "OF-" + str(t.get("advertiserId", "")),
-                        "order_value": t.get("saleAmount", {}).get("amount", 0) if isinstance(t.get("saleAmount"), dict) else t.get("saleAmount", 0),
-                        "status": t.get("commissionStatus", "pending"), "ts": t.get("transactionDate", ""),
-                        "event_subtype": provenance.conversion_type(self._state()), **self._prov(cv)})
-            comm = t.get("commissionAmount", {}).get("amount", 0) if isinstance(t.get("commissionAmount"), dict) else t.get("commissionAmount", 0)
-            repo.insert("commissions", {"id": f"CO-{tid}", "conversion_event_id": cv, "amount": comm,
-                        "status": t.get("commissionStatus", "pending"), **self._prov(f"CO-{tid}")})
+                        "event_subtype": provenance.click_type(self._state(), network_reported=True),
+                        **self._prov(ce, currency=currency)})
+            repo.insert("conversion_events", {"id": cv, "click_event_id": ce,
+                        "offer_id": "OF-" + str(t.get("advertiserId", "")),
+                        "order_value": order_value, "status": status, "ts": t.get("transactionDate", ""),
+                        "event_subtype": provenance.conversion_type(self._state()),
+                        **self._prov(cv, currency=currency)})
+            repo.insert("commissions", {"id": f"CO-{tid}", "conversion_event_id": cv,
+                        "amount": comm_amount, "status": status,
+                        **self._prov(f"CO-{tid}", currency=currency)})
             n += 1
-        return {"step": "transactions", "ok": True, "ingested": n, "data_state": self._state()}
+        return {"step": "transactions", "ok": True, "ingested": n,
+                "data_state": self._state(), "note": "empty production result stays non-real" if n == 0 else ""}
 
-    # ---- Trạng thái toàn chuỗi ----
     def chain_status(self) -> Dict:
         steps = ["auth", "publisher_verify", "offers", "deep_link", "tracking",
                  "transactions", "commission", "revenue", "contribution_profit"]
-        ready = self._ready() and self.transport is not None and self.transport.is_production
+        ready = self._ready() and self._is_production()
         return {"steps": steps, "ready_for_real": ready, "data_state": self._state(),
                 "blocked_by": [] if ready else ["AWIN production credential", "transport/egress (PR-002)"]}
