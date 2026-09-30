@@ -1,0 +1,23 @@
+-- AFFOS provenance (PRD-017 / CTO review). Thêm cột provenance vào bảng tài chính/sự kiện. Idempotent.
+alter table offers            add column if not exists source text;
+alter table offers            add column if not exists data_state text;
+alter table click_events      add column if not exists source text;
+alter table click_events      add column if not exists source_record_id text;
+alter table click_events      add column if not exists data_state text;
+alter table click_events      add column if not exists event_subtype text;
+alter table click_events      add column if not exists fetched_at timestamptz;
+alter table click_events      add column if not exists is_verified boolean default false;
+alter table conversion_events add column if not exists source text;
+alter table conversion_events add column if not exists source_record_id text;
+alter table conversion_events add column if not exists data_state text;
+alter table conversion_events add column if not exists event_subtype text;
+alter table conversion_events add column if not exists fetched_at timestamptz;
+alter table conversion_events add column if not exists is_verified boolean default false;
+alter table commissions       add column if not exists source text;
+alter table commissions       add column if not exists source_record_id text;
+alter table commissions       add column if not exists data_state text;
+alter table commissions       add column if not exists fetched_at timestamptz;
+alter table commissions       add column if not exists is_verified boolean default false;
+alter table revenue           add column if not exists data_state text;
+alter table revenue           add column if not exists revenue_label text;
+alter table revenue           add column if not exists is_verified boolean default false;

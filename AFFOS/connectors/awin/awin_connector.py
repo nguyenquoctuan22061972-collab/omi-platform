@@ -13,6 +13,11 @@ Live path cần gọi mạng + Bearer token → PR-005 (chưa bật trong repo).
 """
 from __future__ import annotations
 
+import os
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'core'))
+import provenance  # noqa: E402
+
 from typing import Dict, List, Mapping, Optional
 
 BASE = "https://api.awin.com"
@@ -60,6 +65,7 @@ class AwinConnector:
             repo.insert("products", {"id": o["product_id"], "merchant_id": merchant_id,
                                      "title": o["title"], "price": o["price"], "currency": "VND"})
             repo.insert("offers", {"id": "OF-" + o["product_id"], "product_id": o["product_id"],
-                                   "merchant_id": merchant_id, "commission_rate": o["commission_rate"], "active": 1})
+                                   "merchant_id": merchant_id, "commission_rate": o["commission_rate"], "active": 1,
+                                   **provenance.provenance("awin_seed", o["product_id"], "SEEDED")})
             n += 1
         return {"mode": data["mode"], "ingested": n}

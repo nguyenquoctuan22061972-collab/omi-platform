@@ -17,6 +17,8 @@ sys.path.insert(0, _CORE)
 sys.path.insert(0, os.path.join(_CORE, "attribution"))
 sys.path.insert(0, os.path.join(_CORE, "..", "connectors", "affiliate-network"))
 from data_access import Repo            # noqa: E402
+import provenance          # noqa: E402
+import proof               # noqa: E402
 import attribution                      # noqa: E402
 from affiliate_network_connector import AffiliateNetworkConnector  # noqa: E402
 
@@ -34,6 +36,8 @@ def run(events: Optional[List[Dict]] = None, env: Optional[Dict] = None,
     repo = Repo()
     conn = connector if connector is not None else AffiliateNetworkConnector(env)
     ing = conn.ingest(repo)
+    DS = 'SEEDED' if ing['mode'] == 'dry-run' else 'LIVE'
+    src = getattr(conn, 'name', 'seed')
 
     if events is None and hasattr(conn, 'fetch_report'):
         rep = conn.fetch_report()
@@ -52,21 +56,28 @@ def run(events: Optional[List[Dict]] = None, env: Optional[Dict] = None,
         repo.insert("tracking_links", {"id": link, "campaign_id": camp, "offer_id": offer,
                                        "slug": pid.lower(), "target_url": "https://x/" + pid})
         for i in range(ev.get("clicks", 0)):
-            repo.insert("click_events", {"id": f"CE-{pid}-{i}", "tracking_link_id": link, "ts": _ts()})
+            repo.insert("click_events", {"id": f"CE-{pid}-{i}", "tracking_link_id": link, "ts": _ts(),
+                        "event_subtype": provenance.click_type(DS),
+                        **provenance.provenance(src, f"CE-{pid}-{i}", DS)})
         for j, ov in enumerate(ev.get("conversions", [])):
             ce = f"CE-{pid}-{j}"   # gán conversion vào click j (attribution last-click)
             cv = f"CV-{pid}-{j}"
             repo.insert("conversion_events", {"id": cv, "click_event_id": ce, "offer_id": offer,
-                                              "order_value": ov, "status": "confirmed", "ts": _ts()})
+                                              "order_value": ov, "status": "confirmed", "ts": _ts(),
+                                              "event_subtype": provenance.conversion_type(DS),
+                                              **provenance.provenance(src, cv, DS)})
             repo.insert("commissions", {"id": f"CO-{pid}-{j}", "conversion_event_id": cv,
-                                        "amount": round(ov * rate, 2), "status": "confirmed"})
+                                        "amount": round(ov * rate, 2), "status": "confirmed",
+                                        **provenance.provenance(src, f"CO-{pid}-{j}", DS)})
 
     per = attribution.per_campaign(repo)
     tot = attribution.totals(repo, ai_cost=costs.get("ai_cost", 0),
                              content_cost=costs.get("content_cost", 0),
                              infrastructure_cost=costs.get("infrastructure_cost", 0),
                              advertising_cost=costs.get("advertising_cost", 0))
-    return {"data_source": ing["mode"], "connector_ingested": ing["ingested"],
+    return {"data_source": ing["mode"], "data_state": DS,
+            "real_commerce_proof": proof.real_commerce_proof(repo),
+            "connector_ingested": ing["ingested"],
             "per_campaign": per, "totals": tot,
             "counts": {t: repo.count(t) for t in ["products", "offers", "campaigns",
                                                   "click_events", "conversion_events", "commissions"]}}

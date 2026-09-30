@@ -11,6 +11,7 @@ from typing import Dict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "economics"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import economics  # noqa: E402
+import provenance  # noqa: E402
 
 
 def per_campaign(repo) -> Dict:
@@ -47,4 +48,10 @@ def totals(repo, ai_cost: float = 0.0, content_cost: float = 0.0,
     profit = economics.contribution_profit(
         revenue, refunds=refunds, ai_cost=ai_cost, content_cost=content_cost,
         infrastructure_cost=infrastructure_cost, advertising_cost=advertising_cost + ad_from_exp)
-    return {"revenue": round(revenue, 2), "refunds": round(refunds, 2), **profit}
+    # Trạng thái dữ liệu: verified chỉ khi MỌI commission là PRODUCTION_VERIFIED + is_verified.
+    rows = repo.query("SELECT data_state, is_verified FROM commissions")
+    verified = bool(rows) and all(r["data_state"] == "PRODUCTION_VERIFIED" and int(r["is_verified"] or 0) == 1 for r in rows)
+    data_state = "PRODUCTION_VERIFIED" if verified else (rows[0]["data_state"] if rows else "DRY_RUN")
+    return {"revenue": round(revenue, 2), "refunds": round(refunds, 2),
+            "data_state": data_state, "revenue_label": provenance.revenue_label(data_state),
+            "is_verified": verified, **profit}
