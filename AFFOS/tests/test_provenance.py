@@ -45,9 +45,10 @@ class TestProvenance(unittest.TestCase):
     def test_postgres_adapter_gated(self):
         with self.assertRaises(RuntimeError):
             PostgresRepository({})                                  # thiếu creds
-        with self.assertRaises(NotImplementedError):
-            PostgresRepository({"DATABASE_URL": "postgres://x"})    # chưa bật driver
-        self.assertIsInstance(select_repository({}), SqliteRepository)
+        # Có URL nhưng không có driver/DB → lỗi tường minh (không im lặng fallback SQLite)
+        with self.assertRaises(Exception):
+            PostgresRepository({"DATABASE_URL": "postgres://x"})
+        self.assertIsInstance(select_repository({}), SqliteRepository)  # không creds → SQLite
 
     def test_pipeline_is_seeded_not_real(self):
         r = pipeline.run(connector=AwinConnector({}))
