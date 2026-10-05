@@ -28,12 +28,16 @@ def _ts():
 
 
 def run(events: Optional[List[Dict]] = None, env: Optional[Dict] = None,
-        costs: Optional[Dict] = None, connector=None) -> Dict:
+        costs: Optional[Dict] = None, connector=None, repo=None) -> Dict:
     """events: [{product_id, clicks:int, conversions:[order_value,...]}] — nguồn dữ liệu.
-    Nếu None → seed demo. Trả attribution + profit + data_source."""
+    Nếu None → seed demo. Trả attribution + profit + data_source.
+
+    repo: tuỳ chọn — cho phép runtime inject adapter (mặc định SQLite dry-run). Pipeline này
+    là DRY-RUN/SEED demo và dùng paramstyle SQLite; LIVE/Postgres đi qua AWIN ingestion path
+    (connectors/awin + runtime.awin_ingest), không qua seed pipeline này."""
     env = env or {}
     costs = costs or {}
-    repo = Repo()
+    repo = repo if repo is not None else Repo()
     conn = connector if connector is not None else AffiliateNetworkConnector(env)
     ing = conn.ingest(repo)
     DS = 'SEEDED' if ing['mode'] == 'dry-run' else 'LIVE'
