@@ -25,6 +25,14 @@ def build_health_response(env=None):
     return 200, body
 
 
+def build_output_response(env=None):
+    """DRY-RUN first-commercial-output endpoint. Refuses in LIVE mode (returns 409)."""
+    import commercial_output
+    out = commercial_output.build_output(env if env is not None else os.environ)
+    code = 409 if out.get("status") == "REFUSED" else 200
+    return code, json.dumps(out, ensure_ascii=False).encode()
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: bytes):
         self.send_response(code)
@@ -36,6 +44,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/health", "/", "/healthz"):
             code, body = build_health_response()
+            self._send(code, body)
+        elif self.path.startswith("/output/dry-run"):
+            code, body = build_output_response()
             self._send(code, body)
         else:
             self._send(404, b'{"error":"not found"}')
