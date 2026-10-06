@@ -22,7 +22,14 @@ from typing import Dict, Mapping, Optional
 _HERE = os.path.dirname(__file__)
 sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(_HERE, "..", "connectors", "impact"))
-import runtime  # noqa: E402
+
+# runtime/ is a namespace package, so a bare `import runtime` can bind the package DIRECTORY
+# (no functions) when this module is imported as `runtime.impact_ingest`. Load runtime.py by
+# its file path so repository_mode()/build_repository() are always available, in any context.
+import importlib.util as _ilu  # noqa: E402
+_rt_spec = _ilu.spec_from_file_location("affos_runtime_core", os.path.join(_HERE, "runtime.py"))
+runtime = _ilu.module_from_spec(_rt_spec)
+_rt_spec.loader.exec_module(runtime)  # noqa: E402
 
 
 def _stop(reason: str, mode: str) -> Dict:
