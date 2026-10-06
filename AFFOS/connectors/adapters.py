@@ -24,7 +24,8 @@ from connector_interface import Connector, envelope           # noqa: E402
 from affiliate_network_connector import AffiliateNetworkConnector  # noqa: E402
 import awin_live                                               # noqa: E402
 from awin_live import AwinLiveClient, STATUS_MAP, AWIN_BASE    # noqa: E402
-from impact_live import ImpactLiveClient, STATUS_MAP as IMPACT_STATUS_MAP, IMPACT_BASE  # noqa: E402
+from impact_live import (ImpactLiveClient, STATUS_MAP as IMPACT_STATUS_MAP,  # noqa: E402
+                         IMPACT_BASE, iso8601 as _impact_iso8601)
 
 
 # ----------------------------------------------------------------------------
@@ -234,7 +235,8 @@ class ImpactAdapter(Connector):
     def _actions(self, start: str, end: str):
         cl = self.client
         url = (f"{IMPACT_BASE}/Mediapartners/{cl.sid}/Actions"
-               f"?ActionDateStart={quote(start)}&ActionDateEnd={quote(end)}&PageSize=100")
+               f"?ActionDateStart={quote(_impact_iso8601(start))}&ActionDateEnd={quote(_impact_iso8601(end))}"
+               f"&Page=1&PageSize=100")
         data = cl.transport.get(url, cl._auth_header())
         return data.get("Actions", data if isinstance(data, list) else [])
 

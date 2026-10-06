@@ -33,6 +33,18 @@ STATUS_MAP = {
 SQLITE_STATES = {"TEST", "DRY_RUN", "SEEDED"}
 
 
+def iso8601(value: str) -> str:
+    """Normalize a date/datetime string to ISO-8601 date-time (Impact Actions API contract).
+
+    A bare date 'YYYY-MM-DD' → 'YYYY-MM-DDT00:00:00Z' (Impact rejects date-only → HTTP 400).
+    A value already carrying a time component ('T') is passed through unchanged.
+    """
+    v = (value or "").strip()
+    if not v or "T" in v:
+        return v
+    return v + "T00:00:00Z"
+
+
 class ImpactError(RuntimeError): pass
 class ImpactAuthError(ImpactError): pass
 class ImpactPermissionError(ImpactError): pass
@@ -63,11 +75,19 @@ class ProductionTransport(Transport):
             with urllib.request.urlopen(req, timeout=30) as r:
                 body = r.read().decode()
         except urllib.error.HTTPError as e:
+            # Surface the API error body (safe: it describes the request, carries no credential)
+            # so a 4xx like a bad ActionDate format is diagnosable instead of a bare "HTTP 400".
+            detail = ""
+            try:
+                detail = e.read().decode(errors="replace")[:300].replace("\n", " ").strip()
+            except Exception:
+                pass
+            suffix = f": {detail}" if detail else ""
             if e.code == 401:
-                raise ImpactAuthError(f"auth failed HTTP {e.code}") from None
+                raise ImpactAuthError(f"auth failed HTTP {e.code}{suffix}") from None
             if e.code == 403:
-                raise ImpactPermissionError(f"permission denied HTTP {e.code}") from None
-            raise ImpactHTTPError(f"HTTP {e.code}") from None
+                raise ImpactPermissionError(f"permission denied HTTP {e.code}{suffix}") from None
+            raise ImpactHTTPError(f"HTTP {e.code}{suffix}") from None
         except urllib.error.URLError as e:
             raise ImpactNetworkError(f"network error: {e.reason}") from None
         try:
@@ -153,9 +173,11 @@ class ImpactLiveClient:
         if not self._ready():
             return {"step": "actions", "ok": False, "blocked": "auth/publisher"}
         self._guard_repo_for_production(repo)
-        # Impact Actions API filters by ActionDateStart/ActionDateEnd (ISO 8601), with paging.
+        # Impact Actions API filters by ActionDateStart/ActionDateEnd as ISO-8601 DATE-TIME
+        # (date-only values are rejected with HTTP 400); pagination uses Page + PageSize.
         url = (f"{IMPACT_BASE}/Mediapartners/{self.sid}/Actions"
-               f"?ActionDateStart={quote(start)}&ActionDateEnd={quote(end)}&PageSize=100")
+               f"?ActionDateStart={quote(iso8601(start))}&ActionDateEnd={quote(iso8601(end))}"
+               f"&Page=1&PageSize=100")
         data = self.transport.get(url, self._auth_header())
         actions = data.get("Actions", data if isinstance(data, list) else [])
         n = 0

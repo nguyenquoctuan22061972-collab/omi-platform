@@ -177,5 +177,46 @@ class TestImpactActionsRequest(unittest.TestCase):
         self.assertTrue(c._auth_header().startswith("Basic "))
 
 
+class TestImpactDatetimeAndErrors(unittest.TestCase):
+    """HOTFIX 2: ISO-8601 date-time params (root cause of HTTP 400) + 400-body diagnostics."""
+
+    def test_iso8601_helper(self):
+        from impact_live import iso8601
+        self.assertEqual(iso8601("2026-10-01"), "2026-10-01T00:00:00Z")   # bare date → date-time
+        self.assertEqual(iso8601("2026-10-01T06:30:00Z"), "2026-10-01T06:30:00Z")  # passthrough
+        self.assertEqual(iso8601(""), "")
+
+    def test_bare_date_sent_as_iso_datetime(self):
+        t = _CapturingProd({"Actions": []})
+        ImpactAdapter(CREDS, transport=t).get_conversions("2026-10-01", "2026-10-06")
+        url = t.urls[-1]
+        # ':' is percent-encoded; bare date expanded to midnight UTC
+        self.assertIn("ActionDateStart=2026-10-01T00%3A00%3A00Z", url)
+        self.assertIn("ActionDateEnd=2026-10-06T00%3A00%3A00Z", url)
+        self.assertIn("Page=1", url)
+        self.assertIn("PageSize=100", url)
+
+    def test_datetime_passthrough(self):
+        t = _CapturingProd({"Actions": []})
+        c = ImpactLiveClient(CREDS, transport=t)
+        c.ingest_actions(_MemLiveRepo(), "2026-10-01T06:30:00Z", "2026-10-06T23:59:59Z")
+        url = t.urls[-1]
+        self.assertIn("ActionDateStart=2026-10-01T06%3A30%3A00Z", url)
+        self.assertNotIn("T00%3A00%3A00ZT", url)   # no double time component
+
+    def test_http_400_body_is_surfaced(self):
+        import io
+        import urllib.error
+        from unittest import mock
+        err = urllib.error.HTTPError("https://api.impact.com/x", 400, "Bad Request", {},
+                                     io.BytesIO(b"Invalid ActionDateStart format"))
+        with mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(ImpactHTTPError) as cm:
+                ProductionTransport().get("https://api.impact.com/x", "Basic xxx")
+        msg = str(cm.exception)
+        self.assertIn("400", msg)
+        self.assertIn("Invalid ActionDateStart", msg)   # body no longer hidden
+
+
 if __name__ == "__main__":
     unittest.main()
