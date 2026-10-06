@@ -17,11 +17,13 @@ _HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_HERE, "..", "core"))
 sys.path.insert(0, os.path.join(_HERE, "affiliate-network"))
 sys.path.insert(0, os.path.join(_HERE, "awin"))
+sys.path.insert(0, os.path.join(_HERE, "impact"))
 
 from connector_interface import Connector, envelope           # noqa: E402
 from affiliate_network_connector import AffiliateNetworkConnector  # noqa: E402
 import awin_live                                               # noqa: E402
 from awin_live import AwinLiveClient, STATUS_MAP, AWIN_BASE    # noqa: E402
+from impact_live import ImpactLiveClient, STATUS_MAP as IMPACT_STATUS_MAP, IMPACT_BASE  # noqa: E402
 
 
 # ----------------------------------------------------------------------------
@@ -173,14 +175,104 @@ class AwinAdapter(Connector):
 
 
 # ----------------------------------------------------------------------------
-_REGISTRY = {"affiliate_network": AffiliateNetworkAdapter, "awin": AwinAdapter}
+class ImpactAdapter(Connector):
+    """Impact (impact.com) behind the interface — AFFOS.1. Reuses ImpactLiveClient.
+
+    mode(): LIVE only when a production transport + creds are ready; otherwise DRY-RUN.
+    Action reads are read-only (no repo write, no Postgres guard); never fabricate.
+    NOTE: impact_production is not yet in PRODUCTION_SOURCES, so records are never is_real().
+    """
+
+    name = "impact"
+
+    def __init__(self, env: Optional[Dict] = None, transport=None):
+        self.client = ImpactLiveClient(env or {}, transport=transport)
+
+    def mode(self) -> str:
+        return "LIVE" if (self.client._ready() and self.client._is_production()) else "DRY-RUN"
+
+    def _blocked(self, cap: str) -> Dict:
+        return envelope(cap, self.mode(), [], ok=False, blocked="auth/publisher/transport")
+
+    def get_offers(self) -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_offers")
+        r = self.client.get_offers()
+        return envelope("get_offers", self.mode(), r.get("offers", []), ok=r.get("ok", False))
+
+    def get_merchants(self) -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_merchants")
+        r = self.client.get_offers()
+        merchants = [{"id": "M-" + o.get("product_id", ""), "product_id": o.get("product_id", ""),
+                      "network": self.name} for o in r.get("offers", [])]
+        return envelope("get_merchants", self.mode(), merchants, ok=r.get("ok", False))
+
+    def get_products(self) -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_products")
+        r = self.client.get_offers()
+        items = [{"id": o.get("product_id", ""), "offer_id": o.get("id", ""),
+                  "currency": o.get("currency", "")} for o in r.get("offers", [])]
+        return envelope("get_products", self.mode(), items, ok=r.get("ok", False))
+
+    def get_commission(self, offer_id: Optional[str] = None) -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_commission")
+        r = self.client.get_offers()
+        items = [{"offer_id": o.get("id", ""), "commission_rate": o.get("commission_rate", 0),
+                  "currency": o.get("currency", "")} for o in r.get("offers", [])]
+        if offer_id:
+            items = [i for i in items if i["offer_id"] == offer_id]
+        return envelope("get_commission", self.mode(), items, ok=r.get("ok", False))
+
+    def create_tracking_link(self, merchant_id: str, target_url: str, clickref: str) -> Dict:
+        link = self.client.deep_link(merchant_id, target_url, clickref)
+        return envelope("create_tracking_link", self.mode(), [{"url": link}])
+
+    def _actions(self, start: str, end: str):
+        cl = self.client
+        url = f"{IMPACT_BASE}/Mediapartners/{cl.sid}/Actions?StartDate={start}&EndDate={end}"
+        data = cl.transport.get(url, cl._auth_header())
+        return data.get("Actions", data if isinstance(data, list) else [])
+
+    def get_clicks(self, start: str = "", end: str = "") -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_clicks")
+        items = [{"id": "CE-" + str(a.get("Id")), "ts": a.get("ClickDate", "")}
+                 for a in self._actions(start, end)]
+        return envelope("get_clicks", self.mode(), items)
+
+    def get_conversions(self, start: str = "", end: str = "") -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_conversions")
+        items = [{"id": "CV-" + str(a.get("Id")), "order_value": a.get("Amount", 0),
+                  "currency": a.get("Currency", ""),
+                  "status": IMPACT_STATUS_MAP.get(str(a.get("State", "")).lower(), "PENDING")}
+                 for a in self._actions(start, end)]
+        return envelope("get_conversions", self.mode(), items)
+
+    def get_revenue(self, start: str = "", end: str = "") -> Dict:
+        if not self.client._ready():
+            return self._blocked("get_revenue")
+        items = [{"id": "CO-" + str(a.get("Id")), "amount": a.get("Payout", 0),
+                  "currency": a.get("Currency", ""),
+                  "status": IMPACT_STATUS_MAP.get(str(a.get("State", "")).lower(), "PENDING")}
+                 for a in self._actions(start, end)]
+        return envelope("get_revenue", self.mode(), items)
+
+
+# ----------------------------------------------------------------------------
+_REGISTRY = {"affiliate_network": AffiliateNetworkAdapter, "awin": AwinAdapter, "impact": ImpactAdapter}
 
 
 def get_connector(name: str, env: Optional[Dict] = None, transport=None) -> Connector:
-    """Factory. AWIN is proof network #1; impact.com/others are NOT registered yet."""
+    """Factory. AWIN is proof network #1; Impact (AFFOS.1) is registered DRY-RUN."""
     key = (name or "").lower()
     if key not in _REGISTRY:
         raise ValueError(f"connector chưa đăng ký: {name} (chỉ: {sorted(_REGISTRY)})")
     if key == "awin":
         return AwinAdapter(env, transport=transport)
+    if key == "impact":
+        return ImpactAdapter(env, transport=transport)
     return AffiliateNetworkAdapter(env)
