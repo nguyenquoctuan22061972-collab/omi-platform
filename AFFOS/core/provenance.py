@@ -18,7 +18,7 @@ CLICK_TYPES = {"AFFOS_TRACKED_CLICK", "NETWORK_REPORTED_CLICK", "SEEDED_CLICK"}
 CONVERSION_TYPES = {"AWIN_PRODUCTION_CONVERSION", "SEEDED_CONVERSION"}
 REVENUE_LABELS = {"PRODUCTION_REVENUE", "SIMULATED_REVENUE"}
 
-PRODUCTION_SOURCES = {"awin_production"}   # chỉ nguồn này mới có thể là REAL
+PRODUCTION_SOURCES = {"awin_production", "impact_production"}   # nguồn production được duyệt REAL
 
 
 def provenance(source: str, source_record_id: str, data_state: str,

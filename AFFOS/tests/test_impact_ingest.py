@@ -45,10 +45,10 @@ class TestImpactPreflight(unittest.TestCase):
     def test_adapter_gate_passes(self):
         self.assertEqual(pf.gate_impact_adapter({})["status"], "PASS")
 
-    def test_whitelist_is_not_yet(self):
-        # GATE-2 guarantee: impact_production must NOT be whitelisted.
-        self.assertNotIn("impact_production", provenance.PRODUCTION_SOURCES)
-        self.assertEqual(pf.gate_impact_whitelist()["status"], "NOT_YET")
+    def test_whitelist_enabled(self):
+        # CTO-approved: impact_production IS now whitelisted.
+        self.assertIn("impact_production", provenance.PRODUCTION_SOURCES)
+        self.assertEqual(pf.gate_impact_whitelist()["status"], "ENABLED")
 
     def test_run_impact_not_ready_without_external_deps(self):
         out = pf.run_impact({}, run_tests=False, probe_network=False)

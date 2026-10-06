@@ -76,13 +76,16 @@ class TestImpactLive(unittest.TestCase):
         self.assertEqual(proof.real_commerce_proof(repo)["status"], "NOT YET VERIFIED")
         self.assertFalse(provenance.is_real(repo.query("SELECT * FROM commissions")[0]))
 
-    def test_impact_never_real_even_production(self):
-        # production transport + creds → state PRODUCTION_VERIFIED, BUT impact_production is not
-        # in PRODUCTION_SOURCES, so is_real() must still be False.
+    def test_impact_production_real_when_verified(self):
+        # CTO-approved whitelist: impact_production IS in PRODUCTION_SOURCES now, so a
+        # production-transport + verified record is_real()==True. Fake/TEST stays non-real.
         c = ImpactLiveClient(CREDS, transport=ProductionTransport())
         self.assertEqual(c._state(), "PRODUCTION_VERIFIED")
         rec = c._prov("X-1", currency="USD")
-        self.assertFalse(provenance.is_real(rec))      # guardrail: Impact not whitelisted yet
+        self.assertTrue(provenance.is_real(rec))        # whitelisted production source
+        # fake/test transport must still never be real
+        f = ImpactLiveClient(CREDS, transport=FakeTransport())
+        self.assertFalse(provenance.is_real(f._prov("X-2", currency="USD")))
 
     def test_production_requires_credentials(self):
         c = ImpactLiveClient({"IMPACT_ACCOUNT_SID": "SID"}, transport=ProductionTransport())
