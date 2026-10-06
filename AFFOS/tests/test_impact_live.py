@@ -123,5 +123,59 @@ class TestImpactLive(unittest.TestCase):
         self.assertEqual(len(st["steps"]), 9)
 
 
+class _MemLiveRepo:
+    """Non-SQLite LIVE repo double so the production write-guard passes (no real DB)."""
+    data_state = "LIVE"
+    def __init__(self): self.rows = {}
+    def insert(self, table, row): self.rows.setdefault(table, []).append(row)
+    def query(self, sql, params=()): return []
+    def count(self, table): return len(self.rows.get(table, []))
+
+
+class _CapturingProd(ProductionTransport):
+    """Production-flagged transport that records request URLs (no network)."""
+    def __init__(self, payload):
+        self.payload = payload
+        self.urls = []
+    def get(self, url, auth_header):
+        self.urls.append(url)
+        if not auth_header:
+            raise ImpactAuthError("missing credentials")
+        return self.payload
+
+
+class TestImpactActionsRequest(unittest.TestCase):
+    ACTION = {"Id": 1, "CampaignId": 9, "Amount": 100, "Payout": 30,
+              "Currency": "USD", "State": "APPROVED",
+              "ClickDate": "2026-10-05", "EventDate": "2026-10-06"}
+
+    def test_ingest_actions_uses_impact_date_params(self):
+        t = _CapturingProd({"Actions": [self.ACTION]})
+        c = ImpactLiveClient(CREDS, transport=t)
+        res = c.ingest_actions(_MemLiveRepo(), "2026-10-01", "2026-10-06")
+        self.assertEqual(res["ingested"], 1)
+        url = t.urls[-1]
+        self.assertIn("/Mediapartners/SID123/Actions", url)
+        self.assertIn("ActionDateStart=2026-10-01", url)   # Impact contract param
+        self.assertIn("ActionDateEnd=2026-10-06", url)
+        self.assertNotIn("StartDate=", url)                 # old wrong param gone
+        self.assertNotIn("EndDate=", url)
+
+    def test_adapter_actions_reads_use_impact_date_params(self):
+        t = _CapturingProd({"Actions": []})
+        a = ImpactAdapter(CREDS, transport=t)
+        a.get_conversions("2026-10-01", "2026-10-06")
+        url = t.urls[-1]
+        self.assertIn("/Mediapartners/SID123/Actions", url)
+        self.assertIn("ActionDateStart=2026-10-01", url)
+        self.assertIn("ActionDateEnd=2026-10-06", url)
+        self.assertNotIn("StartDate=", url)
+
+    def test_production_auth_header_is_basic(self):
+        # request carries HTTP Basic auth (Impact contract); creds never logged by the client.
+        c = ImpactLiveClient(CREDS, transport=_CapturingProd({"Items": []}))
+        self.assertTrue(c._auth_header().startswith("Basic "))
+
+
 if __name__ == "__main__":
     unittest.main()

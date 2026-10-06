@@ -153,8 +153,9 @@ class ImpactLiveClient:
         if not self._ready():
             return {"step": "actions", "ok": False, "blocked": "auth/publisher"}
         self._guard_repo_for_production(repo)
+        # Impact Actions API filters by ActionDateStart/ActionDateEnd (ISO 8601), with paging.
         url = (f"{IMPACT_BASE}/Mediapartners/{self.sid}/Actions"
-               f"?StartDate={start}&EndDate={end}")
+               f"?ActionDateStart={quote(start)}&ActionDateEnd={quote(end)}&PageSize=100")
         data = self.transport.get(url, self._auth_header())
         actions = data.get("Actions", data if isinstance(data, list) else [])
         n = 0

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 from typing import Dict, Optional
+from urllib.parse import quote
 
 _HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_HERE, "..", "core"))
@@ -232,7 +233,8 @@ class ImpactAdapter(Connector):
 
     def _actions(self, start: str, end: str):
         cl = self.client
-        url = f"{IMPACT_BASE}/Mediapartners/{cl.sid}/Actions?StartDate={start}&EndDate={end}"
+        url = (f"{IMPACT_BASE}/Mediapartners/{cl.sid}/Actions"
+               f"?ActionDateStart={quote(start)}&ActionDateEnd={quote(end)}&PageSize=100")
         data = cl.transport.get(url, cl._auth_header())
         return data.get("Actions", data if isinstance(data, list) else [])
 
