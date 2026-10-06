@@ -206,8 +206,14 @@ class ImpactAdapter(Connector):
         if not self.client._ready():
             return self._blocked("get_merchants")
         r = self.client.get_offers()
-        merchants = [{"id": "M-" + o.get("product_id", ""), "product_id": o.get("product_id", ""),
-                      "network": self.name} for o in r.get("offers", [])]
+        seen, merchants = set(), []
+        for o in r.get("offers", []):
+            # Impact merchant = catalog advertiser; dedupe by merchant_id (fallback: catalog).
+            mid = o.get("merchant_id") or ("CAT-" + o.get("catalog_id", ""))
+            if mid and mid not in seen:
+                seen.add(mid)
+                merchants.append({"id": mid, "name": o.get("merchant_name", ""),
+                                  "catalog_id": o.get("catalog_id", ""), "network": self.name})
         return envelope("get_merchants", self.mode(), merchants, ok=r.get("ok", False))
 
     def get_products(self) -> Dict:
@@ -215,6 +221,8 @@ class ImpactAdapter(Connector):
             return self._blocked("get_products")
         r = self.client.get_offers()
         items = [{"id": o.get("product_id", ""), "offer_id": o.get("id", ""),
+                  "title": o.get("title", ""), "price": o.get("price", 0),
+                  "merchant_id": o.get("merchant_id", ""), "catalog_id": o.get("catalog_id", ""),
                   "currency": o.get("currency", "")} for o in r.get("offers", [])]
         return envelope("get_products", self.mode(), items, ok=r.get("ok", False))
 

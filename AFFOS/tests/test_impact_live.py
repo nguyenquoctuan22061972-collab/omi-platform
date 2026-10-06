@@ -26,8 +26,11 @@ from connector_interface import verify_contract     # noqa: E402
 class FakeTransport(Transport):
     is_production = False
     def get(self, url, auth_header):
-        if "Catalogs/Items" in url:
-            return {"Items": [{"CatalogItemId": 501, "PayoutRate": 0.30, "Currency": "USD"}]}
+        if "/Items" in url:                        # catalog items (under a catalog)
+            return {"Items": [{"CatalogItemId": 501, "Name": "Widget", "CurrentPrice": 9.99,
+                               "PayoutRate": 0.30, "Currency": "USD"}]}
+        if "/Catalogs" in url:                      # catalog list (one per advertiser)
+            return {"Catalogs": [{"Id": 77, "AdvertiserId": 501, "AdvertiserName": "Acme"}]}
         if "Actions" in url:
             return {"Actions": [{"Id": 9001, "CampaignId": 501, "Amount": 200,
                     "Payout": 60, "Currency": "USD", "State": "APPROVED",
@@ -101,13 +104,15 @@ class TestImpactLive(unittest.TestCase):
                 c.get_offers()
 
     def test_empty_production_stays_non_real(self):
-        c = ImpactLiveClient(CREDS, transport=StubProduction(payload={"Items": []}))
+        c = ImpactLiveClient(CREDS, transport=StubProduction(payload={"Catalogs": []}))
         r = c.get_offers()
         self.assertTrue(r["ok"])
         self.assertEqual(r["count"], 0)
 
     def test_production_currency_required(self):
-        c = ImpactLiveClient(CREDS, transport=StubProduction(payload={"Items": [{"CatalogItemId": 1}]}))
+        # catalog present + item without Currency → production record must raise (no VND default)
+        c = ImpactLiveClient(CREDS, transport=StubProduction(payload={
+            "Catalogs": [{"Id": 1, "AdvertiserId": 2}], "Items": [{"CatalogItemId": 9}]}))
         with self.assertRaises(ImpactCurrencyError):
             c.get_offers()
 
@@ -203,6 +208,44 @@ class TestImpactDatetimeAndErrors(unittest.TestCase):
         url = t.urls[-1]
         self.assertIn("ActionDateStart=2026-10-01T06%3A30%3A00Z", url)
         self.assertNotIn("T00%3A00%3A00ZT", url)   # no double time component
+
+    def test_offer_discovery_uses_catalogs_then_items(self):
+        t = _CapturingProd({})          # payload set per-url below via subclass
+        class _CatProd(ProductionTransport):
+            def __init__(s): s.urls = []
+            def get(s, url, auth_header):
+                s.urls.append(url)
+                if "/Items" in url:
+                    return {"Items": [{"CatalogItemId": 501, "Name": "Widget",
+                                       "CurrentPrice": 9.99, "PayoutRate": 0.3, "Currency": "USD"}]}
+                if "/Catalogs" in url:
+                    return {"Catalogs": [{"Id": 77, "AdvertiserId": 501, "AdvertiserName": "Acme"}]}
+                return {}
+        cp = _CatProd()
+        c = ImpactLiveClient(CREDS, transport=cp)
+        res = c.get_offers()
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["count"], 1)
+        o = res["offers"][0]
+        self.assertEqual(o["product_id"], "501")
+        self.assertEqual(o["catalog_id"], "77")
+        self.assertEqual(o["merchant_id"], "M-501")
+        # endpoint contract: a /Catalogs list call AND a /Catalogs/{id}/Items call were issued
+        self.assertTrue(any(u.endswith("/Catalogs?Page=1&PageSize=100") for u in cp.urls))
+        self.assertTrue(any("/Catalogs/77/Items" in u for u in cp.urls))
+        self.assertFalse(any("/Catalogs/Items" in u for u in cp.urls))   # old wrong endpoint gone
+
+    def test_adapter_merchant_product_mapping(self):
+        a = ImpactAdapter(CREDS, transport=FakeTransport())
+        self.assertEqual(a.mode(), "DRY-RUN")       # fake transport → never LIVE
+        m = a.get_merchants()["items"]
+        self.assertEqual(len(m), 1)
+        self.assertEqual(m[0]["id"], "M-501")
+        self.assertEqual(m[0]["name"], "Acme")
+        p = a.get_products()["items"]
+        self.assertEqual(p[0]["id"], "501")
+        self.assertEqual(p[0]["merchant_id"], "M-501")
+        self.assertEqual(p[0]["catalog_id"], "77")
 
     def test_http_400_body_is_surfaced(self):
         import io

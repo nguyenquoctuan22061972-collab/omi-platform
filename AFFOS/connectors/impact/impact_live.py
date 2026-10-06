@@ -148,19 +148,39 @@ class ImpactLiveClient:
         if self._state() == "PRODUCTION_VERIFIED" and getattr(repo, "data_state", None) in SQLITE_STATES:
             raise ProductionStorageError("production data phải ghi vào Postgres (LIVE), không SQLite")
 
-    # ---- offers (catalog items) ----
+    # ---- offer discovery: Catalogs → Catalog Items ----
+    def _catalogs(self) -> list:
+        """Impact Publisher API: list the publisher's catalogs (one per advertiser/merchant)."""
+        url = f"{IMPACT_BASE}/Mediapartners/{self.sid}/Catalogs?Page=1&PageSize=100"
+        data = self.transport.get(url, self._auth_header())
+        return data.get("Catalogs", data if isinstance(data, list) else [])
+
+    def _catalog_items(self, catalog_id: str) -> list:
+        """Impact Publisher API: items live UNDER a catalog, not at /Catalogs/Items."""
+        url = (f"{IMPACT_BASE}/Mediapartners/{self.sid}/Catalogs/{quote(str(catalog_id))}/Items"
+               f"?Page=1&PageSize=100")
+        data = self.transport.get(url, self._auth_header())
+        return data.get("Items", data if isinstance(data, list) else [])
+
     def get_offers(self) -> Dict:
         if not self._ready():
             return {"step": "offers", "ok": False, "blocked": "auth/publisher"}
-        data = self.transport.get(f"{IMPACT_BASE}/Mediapartners/{self.sid}/Catalogs/Items", self._auth_header())
-        items = data.get("Items", data if isinstance(data, list) else [])
         offers = []
-        for it in items:
-            cur = it.get("Currency", "")
-            pid = str(it.get("CatalogItemId", it.get("Id", "")))
-            offers.append({"id": "OF-" + pid, "product_id": pid,
-                           "commission_rate": it.get("PayoutRate", it.get("Payout", 0)),
-                           **self._prov(pid, currency=cur)})
+        for c in self._catalogs():
+            cid = str(c.get("Id", c.get("CatalogId", "")))
+            adv = str(c.get("AdvertiserId", ""))
+            merchant_id = ("M-" + adv) if adv else ""
+            merchant_name = c.get("AdvertiserName", c.get("Name", ""))
+            for it in self._catalog_items(cid):
+                cur = it.get("Currency", "")
+                pid = str(it.get("CatalogItemId", it.get("Id", "")))
+                offers.append({"id": "OF-" + pid, "product_id": pid,
+                               "catalog_id": cid, "merchant_id": merchant_id,
+                               "merchant_name": merchant_name,
+                               "title": it.get("Name", it.get("Title", "")),
+                               "price": it.get("CurrentPrice", it.get("Price", 0)),
+                               "commission_rate": it.get("PayoutRate", it.get("Payout", 0)),
+                               **self._prov(pid, currency=cur)})
         return {"step": "offers", "ok": True, "offers": offers, "count": len(offers)}
 
     # ---- tracking link ----
