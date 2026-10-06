@@ -184,9 +184,87 @@ def run(env: Optional[Mapping[str, str]] = None, run_tests: bool = True,
                     "it is NOT made by this preflight."}
 
 
+# ------------------------- AFFOS.1 Impact gates (additive) -------------------------
+IMPACT_BASE = "https://api.impact.com"
+
+
+def gate_impact_credentials(env: Mapping[str, str]) -> Dict:
+    sid = bool(env.get("IMPACT_ACCOUNT_SID"))
+    tok = bool(env.get("IMPACT_AUTH_TOKEN"))
+    return {"gate": "Impact credentials", "status": PRESENT if (sid and tok) else MISSING,
+            "detail": f"account_sid={'set' if sid else 'missing'}, auth_token={'set' if tok else 'missing'}"}
+
+
+def gate_impact_reachable(timeout: int = 10) -> Dict:
+    import urllib.error
+    import urllib.request
+    try:
+        req = urllib.request.Request(IMPACT_BASE + "/", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return {"gate": "Impact API reachability", "status": PASS, "detail": f"HTTP {r.getcode()}"}
+    except urllib.error.HTTPError as e:
+        ok = e.code in (401, 403, 404, 405)
+        return {"gate": "Impact API reachability", "status": PASS if ok else FAIL,
+                "detail": f"HTTP {e.code} (host reachable)" if ok else f"HTTP {e.code}"}
+    except Exception as e:
+        return {"gate": "Impact API reachability", "status": FAIL, "detail": f"{type(e).__name__}"}
+
+
+def gate_impact_adapter(env: Mapping[str, str]) -> Dict:
+    try:
+        from connector_interface import verify_contract
+        from adapters import ImpactAdapter
+        a = ImpactAdapter(env)
+        chk = verify_contract(a)
+        return {"gate": "Impact adapter", "status": PASS if chk["contract_ok"] else FAIL,
+                "detail": f"mode={a.mode()}, missing={chk['missing_capabilities']}"}
+    except Exception as e:
+        return {"gate": "Impact adapter", "status": FAIL, "detail": f"{type(e).__name__}"}
+
+
+def gate_impact_whitelist() -> Dict:
+    """Reports whether impact_production is whitelisted for REAL (must stay NOT this gate)."""
+    try:
+        import provenance
+        on = "impact_production" in provenance.PRODUCTION_SOURCES
+        return {"gate": "Impact production whitelist", "status": "ENABLED" if on else "NOT_YET",
+                "detail": "impact_production in PRODUCTION_SOURCES" if on else "withheld pending CTO approval"}
+    except Exception as e:
+        return {"gate": "Impact production whitelist", "status": FAIL, "detail": f"{type(e).__name__}"}
+
+
+_IMPACT_REQUIRED = {"Impact credentials": PRESENT, "Impact API reachability": PASS,
+                    "Postgres connectivity": PASS, "Postgres write": PASS,
+                    "Impact adapter": PASS, "Secret scan": PASS, "Tests": PASS}
+
+
+def run_impact(env: Optional[Mapping[str, str]] = None, run_tests: bool = True,
+               probe_network: bool = True) -> Dict:
+    """AFFOS.1 Impact-specific preflight (isolated from AWIN run())."""
+    env = dict(env or {})
+    gates = [
+        gate_impact_credentials(env),
+        gate_impact_reachable() if probe_network else {"gate": "Impact API reachability", "status": "SKIPPED", "detail": "probe disabled"},
+        gate_pg_connect(env),
+        gate_pg_write(env),
+        gate_impact_adapter(env),
+        gate_secret_scan(),
+        gate_tests(run=run_tests),
+        gate_impact_whitelist(),
+    ]
+    ready = all(g["status"] == _IMPACT_REQUIRED.get(g["gate"]) for g in gates if g["gate"] in _IMPACT_REQUIRED)
+    whitelisted = any(g["gate"] == "Impact production whitelist" and g["status"] == "ENABLED" for g in gates)
+    return {"gates": gates, "ready_for_impact_live_call": ready and whitelisted,
+            "gates_ready_excluding_whitelist": ready,
+            "note": "Impact live ingestion permitted ONLY when ready_for_impact_live_call is True "
+                    "(all gates PASS AND impact_production whitelisted). This preflight makes no call."}
+
+
 if __name__ == "__main__":
     import json
-    out = run(os.environ, run_tests=("--no-tests" not in sys.argv))
+    which = "impact" if "--impact" in sys.argv else "awin"
+    out = (run_impact if which == "impact" else run)(os.environ, run_tests=("--no-tests" not in sys.argv))
     for g in out["gates"]:
-        print(f"{g['status']:>8}  {g['gate']:<24} {g['detail']}")
-    print(f"\nREADY FOR LIVE CALL: {out['ready_for_live_call']}")
+        print(f"{g['status']:>9}  {g['gate']:<28} {g['detail']}")
+    key = "ready_for_impact_live_call" if which == "impact" else "ready_for_live_call"
+    print(f"\n{'READY FOR IMPACT LIVE CALL' if which=='impact' else 'READY FOR LIVE CALL'}: {out[key]}")
