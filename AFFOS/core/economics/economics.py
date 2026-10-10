@@ -32,7 +32,12 @@ def opportunity_score(demand: float, trend: float, conversion: float, epc: float
 
 
 def ai_revenue_ratio(ai_cost: float, revenue: float) -> Dict:
-    ratio = (ai_cost / revenue) if revenue else 0.0
+    # P0-3: zero (or negative) revenue is NOT "healthy" — there is simply no revenue data
+    # to judge cost efficiency. Report NO_REVENUE_DATA and healthy=False, never a false green.
+    if not revenue or float(revenue) <= 0:
+        return {"ai_cost": float(ai_cost), "revenue": float(revenue or 0),
+                "ratio_pct": None, "status": "NO_REVENUE_DATA", "healthy": False}
+    ratio = ai_cost / revenue
     return {"ai_cost": float(ai_cost), "revenue": float(revenue),
-            "ratio_pct": round(ratio * 100, 1),
+            "ratio_pct": round(ratio * 100, 1), "status": "OK",
             "healthy": ratio <= 0.30}   # cảnh báo khi AI/Revenue > 30%

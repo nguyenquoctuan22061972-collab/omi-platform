@@ -16,7 +16,7 @@ NON_REAL_STATES = {"TEST", "DRY_RUN", "SEEDED"}   # tuyệt đối không gắn 
 # Phân loại event (bắt buộc phân biệt seeded vs production).
 CLICK_TYPES = {"AFFOS_TRACKED_CLICK", "NETWORK_REPORTED_CLICK", "SEEDED_CLICK"}
 CONVERSION_TYPES = {"AWIN_PRODUCTION_CONVERSION", "SEEDED_CONVERSION"}
-REVENUE_LABELS = {"PRODUCTION_REVENUE", "SIMULATED_REVENUE"}
+REVENUE_LABELS = {"PRODUCTION_REVENUE", "UNVERIFIED_REVENUE", "SIMULATED_REVENUE"}
 
 PRODUCTION_SOURCES = {"awin_production", "impact_production"}   # nguồn production được duyệt REAL
 
@@ -42,7 +42,13 @@ def is_real(rec: Dict) -> bool:
 
 
 def revenue_label(data_state: str) -> str:
-    return "PRODUCTION_REVENUE" if data_state in ("LIVE", "PRODUCTION_VERIFIED") else "SIMULATED_REVENUE"
+    # P0-5: PRODUCTION_REVENUE only when the chain is PRODUCTION_VERIFIED. LIVE is fetched-but-
+    # unverified → UNVERIFIED_REVENUE (not REAL yet). TEST/DRY_RUN/SEEDED → SIMULATED_REVENUE.
+    if data_state == "PRODUCTION_VERIFIED":
+        return "PRODUCTION_REVENUE"
+    if data_state == "LIVE":
+        return "UNVERIFIED_REVENUE"
+    return "SIMULATED_REVENUE"
 
 
 def click_type(data_state: str, network_reported: bool = False) -> str:
