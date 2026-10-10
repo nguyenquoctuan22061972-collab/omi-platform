@@ -8,12 +8,14 @@ S = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "core", "schem
 
 
 def _sql(n):
-    return open(os.path.join(S, n), encoding="utf-8").read().lower()
+    with open(os.path.join(S, n), encoding="utf-8") as f:
+        return f.read().lower()
 
 
 class TestAFFOSSchema(unittest.TestCase):
     def setUp(self):
-        self.man = json.load(open(os.path.join(S, "schema.manifest.json")))
+        with open(os.path.join(S, "schema.manifest.json")) as f:
+            self.man = json.load(f)
 
     def test_manifest_21(self):
         self.assertEqual(self.man["count"], 21)
