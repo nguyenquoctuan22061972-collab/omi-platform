@@ -58,6 +58,20 @@ class TestDomain(unittest.TestCase):
         for s in skills:
             self.assertEqual(skill_spec.validate_skill(s), [])
 
+    def test_product_scout_import_no_resourcewarning(self):
+        # reloading the module re-runs its module-level SPEC load; must not leak a file handle
+        import gc
+        import importlib
+        import warnings
+        import product_scout
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ResourceWarning)
+            importlib.reload(product_scout)
+            gc.collect()
+        self.assertIsInstance(product_scout.SPEC, dict)        # SPEC structure intact
+        self.assertIn("permissions", product_scout.SPEC)
+        self.assertIn("cost_limit", product_scout.SPEC)
+
     def test_product_scout_scan_and_guardrail(self):
         ps = ProductScout()
         r = ps.scan(CAND, top_k=2)

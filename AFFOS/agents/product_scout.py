@@ -18,7 +18,8 @@ import economics                         # noqa: E402
 import events                           # noqa: E402
 from agent_spec import can, validate_agent  # noqa: E402
 
-SPEC = json.load(open(os.path.join(_HERE, "registry", "product_scout.json"), encoding="utf-8"))
+with open(os.path.join(_HERE, "registry", "product_scout.json"), encoding="utf-8") as _f:
+    SPEC = json.load(_f)   # context-managed so the registry file is always closed
 
 
 class ProductScout:
