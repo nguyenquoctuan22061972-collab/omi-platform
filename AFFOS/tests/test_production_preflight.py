@@ -19,6 +19,17 @@ class TestProductionPreflight(unittest.TestCase):
         self.assertEqual(pf.gate_awin_adapter({})["status"], "PASS")
         self.assertEqual(pf.gate_secret_scan()["status"], "PASS")
 
+    def test_secret_scan_closes_files_no_resourcewarning(self):
+        import gc
+        import warnings
+        # fail if gate_secret_scan leaves any file unclosed (would emit ResourceWarning)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ResourceWarning)
+            r = pf.gate_secret_scan()
+            gc.collect()                      # force finalizers that would warn on an open file
+        self.assertEqual(r["status"], "PASS")  # logic unchanged: clean repo still PASS
+        self.assertIn("hit(s)", r["detail"])
+
     def test_pg_gates_fail_without_url(self):
         self.assertEqual(pf.gate_pg_connect({})["status"], "FAIL")
         self.assertEqual(pf.gate_pg_write({})["status"], "FAIL")

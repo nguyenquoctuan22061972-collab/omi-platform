@@ -165,7 +165,8 @@ def gate_secret_scan() -> Dict:
             if not fn.endswith((".py", ".md", ".json", ".sql", ".sh")):
                 continue
             try:
-                t = open(os.path.join(root, fn), encoding="utf-8", errors="ignore").read()
+                with open(os.path.join(root, fn), encoding="utf-8", errors="ignore") as f:
+                    t = f.read()   # context-managed so the file is always closed, even on error
             except Exception:
                 continue
             for p in _SECRET_PATS:
