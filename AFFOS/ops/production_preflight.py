@@ -87,20 +87,48 @@ def gate_pg_connect(env: Mapping[str, str]) -> Dict:
         return {"gate": "Postgres connectivity", "status": FAIL, "detail": f"{type(e).__name__}"}
 
 
-def gate_pg_write(env: Mapping[str, str]) -> Dict:
-    """Prove write capability without touching real tables: temp table + ROLLBACK."""
+def gate_pg_write(env: Mapping[str, str], _conn=None) -> Dict:
+    """Prove write capability AND verified rollback, touching no business table / schema.
+
+    In an explicit transaction: CREATE TEMP TABLE + INSERT, confirm the row is visible
+    in-transaction, then ROLLBACK and VERIFY the rollback discarded it (the temp table no
+    longer exists). PASS only if the row was written AND the rollback is confirmed. A rollback
+    that errors or fails to discard → FAIL (never silently reported as rolled back).
+    """
+    conn = _conn
     try:
-        conn, why = _pg_conn(env)
         if conn is None:
-            return {"gate": "Postgres write", "status": FAIL, "detail": why}
+            conn, why = _pg_conn(env)
+            if conn is None:
+                return {"gate": "Postgres write", "status": FAIL, "detail": why}
+        try:
+            if hasattr(conn, "autocommit"):
+                conn.autocommit = False     # a committed write cannot be rolled back — force a txn
+        except Exception:
+            pass
         cur = conn.cursor()
         cur.execute("CREATE TEMP TABLE _affos_pf (x int)")
         cur.execute("INSERT INTO _affos_pf VALUES (1)")
-        try: conn.rollback()
-        except Exception: pass
+        cur.execute("SELECT count(*) FROM _affos_pf")
+        in_txn = cur.fetchone()[0]          # expect 1 inside the transaction
+        conn.rollback()                      # NOT swallowed — a rollback error fails the gate
+        # verify rollback actually discarded the temp table (DDL is transactional in Postgres)
+        rolled_back = False
+        try:
+            c2 = conn.cursor()
+            c2.execute("SELECT count(*) FROM _affos_pf")
+            c2.fetchone()                    # table still visible → rollback NOT verified
+        except Exception:
+            try: conn.rollback()             # clear aborted-txn state
+            except Exception: pass
+            rolled_back = True               # table gone → rollback verified
         try: conn.close()
         except Exception: pass
-        return {"gate": "Postgres write", "status": PASS, "detail": "temp insert ok, rolled back"}
+        if in_txn == 1 and rolled_back:
+            return {"gate": "Postgres write", "status": PASS,
+                    "detail": "temp insert visible in-txn (1 row); rollback verified (temp table gone)"}
+        return {"gate": "Postgres write", "status": FAIL,
+                "detail": f"rollback not verified (in_txn={in_txn}, discarded={rolled_back})"}
     except Exception as e:
         return {"gate": "Postgres write", "status": FAIL, "detail": f"{type(e).__name__}"}
 
