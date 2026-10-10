@@ -46,13 +46,15 @@ class TestDomain(unittest.TestCase):
             events.make_event("nope")
 
     def test_agent_spec_and_permissions(self):
-        spec = json.load(open(os.path.join(ROOT, "agents", "registry", "product_scout.json")))
+        with open(os.path.join(ROOT, "agents", "registry", "product_scout.json")) as f:
+            spec = json.load(f)
         self.assertEqual(agent_spec.validate_agent(spec), [])
         self.assertTrue(agent_spec.can(spec, "create_opportunities"))
         self.assertFalse(agent_spec.can(spec, "spend_money"))
 
     def test_skill_spec(self):
-        skills = json.load(open(os.path.join(ROOT, "skills", "definitions", "product_scout_skills.json")))["skills"]
+        with open(os.path.join(ROOT, "skills", "definitions", "product_scout_skills.json")) as f:
+            skills = json.load(f)["skills"]
         for s in skills:
             self.assertEqual(skill_spec.validate_skill(s), [])
 
