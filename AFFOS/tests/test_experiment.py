@@ -133,5 +133,50 @@ class TestResultContract(unittest.TestCase):
         self.assertFalse(r["revenue_proven"])
 
 
+class TestPersistenceBoundary(unittest.TestCase):
+    def test_lifecycle_survives_reload(self):
+        # simulate process restart: save with one repo handle, reload from a fresh handle on same file
+        import tempfile
+        path = tempfile.mktemp(suffix=".db")
+        r1 = Repo(path, data_state="SEEDED")
+        e = X.Experiment("EP1", "h", "C1", policy=_full_policy())
+        e.submit("ceo", event_id="s1"); e.approve("ceo"); e.start("ceo")
+        e.save(r1)
+        r2 = Repo(path, data_state="SEEDED")        # fresh connection = restart
+        e2 = X.Experiment.load(r2, "EP1")
+        self.assertEqual(e2.status, "RUNNING")       # state persisted
+        self.assertEqual(e2.policy["currency"], "USD")
+        self.assertEqual(len(e2.audit), 3)
+        # idempotency survives restart: replaying s1 is still a no-op
+        self.assertTrue(e2.submit("ceo", event_id="s1")["idempotent"])
+
+    def test_audit_rows_persisted(self):
+        repo = Repo(data_state="SEEDED")
+        e = X.Experiment("EP2", policy=_full_policy())
+        e.submit("ceo", "go")
+        e.save(repo)
+        rows = repo.query("SELECT * FROM audit_logs WHERE target='EP2' AND id LIKE 'EXPAUD-%'")
+        self.assertTrue(any(r["event"] == "experiment.transition" for r in rows))
+
+    def test_blocked_transition_recorded_and_fails_closed(self):
+        repo = Repo(data_state="SEEDED")
+        e = X.Experiment("EP3", policy=_full_policy(ceo_approved=False))
+        e.submit("ceo")
+        with self.assertRaises(X.PolicyViolation):
+            e.approve("ceo")                          # fails closed
+        self.assertEqual(e.status, "NEEDS_APPROVAL")  # state unchanged
+        self.assertTrue(any(a["event"] == "blocked" for a in e.audit))  # recorded
+        e.save(repo)
+        rows = repo.query("SELECT * FROM audit_logs WHERE target='EP3' AND event='experiment.blocked'")
+        self.assertTrue(rows)                         # blocked event persisted to audit table
+
+    def test_kill_switch_blocks_execution_not_just_status(self):
+        e = X.Experiment("EP4", policy=_full_policy())
+        e.submit("a"); e.approve("a"); e.kill("a", "stop")
+        with self.assertRaises(X.InvalidTransition):
+            e.start("a")                              # cannot RUN after KILL
+        self.assertEqual(e.status, "KILL")
+
+
 if __name__ == "__main__":
     unittest.main()

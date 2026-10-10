@@ -33,6 +33,25 @@ MONEY-11. No live affiliate call, no VPS change, no secrets.
 | P0-8 | Manifest/migration doc drift | `schema.manifest.json` lists `0003`; production-vs-test-adapter note added | n/a (doc) |
 | — | Idempotency | `repo.insert` upserts by id (SQLite INSERT OR REPLACE / Postgres ON CONFLICT); re-ingest is idempotent | `TestIdempotentIngest` |
 
+## Production-readiness boundary audit (post-712b090)
+
+| Boundary | Verdict | Evidence |
+|---|---|---|
+| Lifecycle persistence across restart | PASS (gap fixed) | `Experiment.save/load` via repo; `test_lifecycle_survives_reload` reloads from a fresh DB handle |
+| Approval bound to experiment + CEO + action | PASS | `transition` gate: APPROVED requires `ceo_approved`; `test_approval_requires_ceo` |
+| Budget/currency validated at execution boundary | PASS | `policy_gate` enforced on `start()` (→RUNNING); `test_running_requires_complete_policy` |
+| Kill switch prevents execution (not just status) | PASS | KILL is terminal → `start()` raises; `test_kill_switch_blocks_execution_not_just_status` |
+| Duplicate/replayed events don't double-apply | PASS | `event_id` idempotency survives reload; `test_duplicate_event_is_noop`, reload test |
+| Result uses persisted, campaign-scoped evidence | PASS | `experiment_result` reads repo via `attribution.totals(currency=)` + `proof(campaign_id=)` |
+| Seed/mock + unverified LIVE ≠ production proof | PASS | `test_seed_data_never_revenue_proven`; `is_real` gate unchanged |
+| Missing tracking linkage blocks verified attribution | PASS | `proof.attribution_linked`; `test_missing_attribution_blocks_proof` |
+| Errors fail closed AND recorded in audit | PASS (gap fixed) | rejected transitions append a `blocked` audit row before raising; `test_blocked_transition_recorded_and_fails_closed` |
+
+Gaps fixed additively this pass: experiment persistence (`save`/`load` reusing the
+`experiments` + `audit_logs` tables — added to the SQLite test adapter, no production
+migration) and fail-closed audit of rejected transitions. No new orchestrator, no duplicated
+approval/proof/attribution.
+
 ## Remaining blockers (not code — external / approval)
 
 - Impact/AWIN credentials, egress, and a LIVE Postgres are required before any real ingestion;

@@ -17,6 +17,7 @@ production data proves revenue.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -91,17 +92,23 @@ class Experiment:
     def transition(self, to: str, actor: str, reason: str = "", event_id: Optional[str] = None) -> Dict:
         if event_id is not None and event_id in self._seen:
             return {"status": self.status, "idempotent": True}
-        if self.status in TERMINAL:
-            raise InvalidTransition(f"{self.status} là trạng thái cuối, không thể chuyển sang {to}")
-        if to not in ALLOWED.get(self.status, set()):
-            raise InvalidTransition(f"không hợp lệ: {self.status} → {to}")
-        # gates
-        if to == "APPROVED" and not self.policy.get("ceo_approved"):
-            raise PolicyViolation("APPROVED yêu cầu ceo_approved=True")
-        if to == "RUNNING":
-            g = policy_gate(self.policy)
-            if not g["ok"]:
-                raise PolicyViolation(f"budget/policy chưa đạt: {g['blocked']}")
+        # Fail CLOSED and record the rejection in the audit trail before raising.
+        try:
+            if self.status in TERMINAL:
+                raise InvalidTransition(f"{self.status} là trạng thái cuối, không thể chuyển sang {to}")
+            if to not in ALLOWED.get(self.status, set()):
+                raise InvalidTransition(f"không hợp lệ: {self.status} → {to}")
+            if to == "APPROVED" and not self.policy.get("ceo_approved"):
+                raise PolicyViolation("APPROVED yêu cầu ceo_approved=True")
+            if to == "RUNNING":
+                g = policy_gate(self.policy)
+                if not g["ok"]:
+                    raise PolicyViolation(f"budget/policy chưa đạt: {g['blocked']}")
+        except (InvalidTransition, PolicyViolation) as e:
+            self.audit.append({"event": "blocked", "actor": actor, "target": self.id,
+                               "reason": (reason + " :: " + str(e)).strip(" :"),
+                               "from": self.status, "to": to, "ts": _ts()})
+            raise
         frm = self.status
         self.status = to
         if event_id is not None:
@@ -120,6 +127,37 @@ class Experiment:
             raise InvalidTransition(f"outcome không hợp lệ: {outcome}")
         return self.transition(outcome, actor, reason, event_id)
     def kill(self, actor, reason="", event_id=None):     return self.transition("KILL", actor, reason, event_id)
+
+    # ---- persistence (reuses repository + experiments/audit_logs tables; no new store) ----
+    def save(self, repo) -> None:
+        """Persist status + a durable JSON state snapshot + append-only audit rows. Idempotent."""
+        repo.insert("experiments", {"id": self.id, "campaign_id": self.campaign_id,
+                                    "hypothesis": self.hypothesis, "variant": "", "metric": "",
+                                    "status": self.status, "created_at": self.created_at})
+        repo.insert("audit_logs", {"id": f"EXPSTATE-{self.id}", "event": "experiment.state",
+                                   "actor": "system", "target": self.id, "ts": _ts(),
+                                   "meta": json.dumps({"status": self.status, "policy": self.policy,
+                                                       "seen": sorted(self._seen), "audit": self.audit})})
+        for i, a in enumerate(self.audit):   # append-only trail as individual rows (idempotent by id)
+            repo.insert("audit_logs", {"id": f"EXPAUD-{self.id}-{i}", "event": "experiment." + a["event"],
+                                       "actor": a.get("actor", ""), "target": self.id, "ts": a.get("ts", ""),
+                                       "meta": json.dumps(a)})
+
+    @classmethod
+    def load(cls, repo, exp_id: str) -> "Experiment":
+        """Rebuild an experiment from persisted state (survives process restart)."""
+        erows = repo.query("SELECT * FROM experiments WHERE id = ?", (exp_id,))
+        if not erows:
+            raise KeyError(f"experiment không tồn tại: {exp_id}")
+        er = erows[0]
+        snap = repo.query("SELECT meta FROM audit_logs WHERE id = ?", (f"EXPSTATE-{exp_id}",))
+        state = json.loads(snap[0]["meta"]) if snap else {}
+        e = cls(exp_id, hypothesis=er.get("hypothesis") or "", campaign_id=er.get("campaign_id") or "",
+                policy=state.get("policy") or {}, status=state.get("status") or er.get("status") or "DRAFT")
+        e._seen = set(state.get("seen") or [])
+        e.audit = state.get("audit") or []
+        e.created_at = er.get("created_at") or e.created_at
+        return e
 
 
 def experiment_result(repo, experiment: Experiment, costs: Optional[Dict] = None) -> Dict:
