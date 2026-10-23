@@ -51,6 +51,38 @@ class TestCommandHub(unittest.TestCase):
         self.assertEqual(h.store.count(), 1)           # no duplicate
         self.assertEqual(rows[0]["status"], "SUCCEEDED")
 
+    def test_default_path_is_mock_not_connected(self):
+        h = CommandHub()
+        out = h.run("build", "WF005")
+        rec = h.result(out["correlation_id"])
+        self.assertEqual(rec["result"]["mode"], "mock")            # mock default, tagged
+        self.assertFalse(rec["result"]["real_claude_connected"])   # never connected in mock
+
+    def test_hub_propagates_real_connected_from_bridge(self):
+        # inject a Bridge whose real runner succeeds → Hub must carry real_claude_connected through
+        from orchestrator.runtime.bridge import Bridge
+        import tempfile
+        d = tempfile.mkdtemp()
+        br = Bridge(mode="real", uid_getter=lambda: 1000,
+                    runner=lambda a, c, t: {"returncode": 0, "stdout": '{"ok":1}', "stderr": ""},
+                    env={"AFFOS_STAGING_WORKSPACE": d, "AFFOS_CLAUDE_BIN": "/opt/claude"})
+        h = CommandHub(bridge=br)
+        out = h.run("build", "staging_ws")
+        rec = h.result(out["correlation_id"])
+        self.assertEqual(rec["status"], "SUCCEEDED")
+        self.assertEqual(rec["result"]["mode"], "real")
+        self.assertTrue(rec["result"]["real_claude_connected"])
+
+    def test_hub_propagates_bridge_blocked(self):
+        from orchestrator.runtime.bridge import Bridge
+        br = Bridge(mode="real", uid_getter=lambda: 0,   # root → blocked
+                    env={"AFFOS_STAGING_WORKSPACE": "/tmp", "AFFOS_CLAUDE_BIN": "/opt/claude"})
+        h = CommandHub(bridge=br)
+        out = h.run("build", "staging_ws")
+        rec = h.result(out["correlation_id"])
+        self.assertEqual(rec["status"], "BLOCKED")
+        self.assertFalse(rec["result"]["real_claude_connected"])
+
 
 if __name__ == "__main__":
     unittest.main()

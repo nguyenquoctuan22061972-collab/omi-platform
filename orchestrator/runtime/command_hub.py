@@ -48,9 +48,14 @@ def _new_task_id() -> str:
 
 
 class CommandHub:
-    def __init__(self, store: Optional[rs.ResultStore] = None, env: Optional[Dict] = None):
+    def __init__(self, store: Optional[rs.ResultStore] = None, env: Optional[Dict] = None,
+                 bridge=None):
+        env = env or {}
         self.store = store or rs.ResultStore(
-            path=(env or {}).get("AFFOS_RESULT_DB", ":memory:"), env=env or {})
+            path=env.get("AFFOS_RESULT_DB", ":memory:"), env=env)
+        # Hub → Bridge → (mock default | opt-in real Claude). Injectable for tests.
+        from orchestrator.runtime.bridge import Bridge
+        self.bridge = bridge or Bridge(env=env)
         self.dispatcher = CapabilityDispatcher()
         self.dispatcher.register(CAPABILITY, self._capability, version="1.0")
         self.queue = QueueOrchestrator()
@@ -60,33 +65,28 @@ class CommandHub:
         self.worker = Worker(WORKER_ID, self.queue, self.dispatcher)
         self.worker.start()
 
-    # ---- the real, low-risk unit of work (runs inside ExecutionEngine) ----
+    # ---- runs inside ExecutionEngine; delegates to the Bridge (Hub → Bridge → Claude) ----
     def _capability(self, ctx) -> Dict:
         p = ctx.payload
         cid = p.get("correlation_id")
         # mark RUNNING (persist, idempotent)
         self.store.put({"correlation_id": cid, "status": rs.RUNNING,
                         "worker": ctx.actor, "capability": ctx.capability})
-        try:
-            command = p.get("command")
-            target = p.get("target")
-            if not target:
-                raise ValueError("target required")
-            # deterministic, side-effect-free work (validation/preview plan) — no network/money
-            output = {
-                "command": command, "target": target, "validated": True,
-                "steps": {"build": ["reuse module", "additive change", "4-gate QA"],
-                          "fix": ["reproduce", "root-cause", "patch", "regression"]}.get(command, []),
-                "note": "executed via orchestrator (dry-run safe; no external calls)",
-            }
-        except Exception as e:
-            self.store.put({"correlation_id": cid, "status": rs.FAILED,
-                            "error": f"{type(e).__name__}: {e}",
+        # Hub submits the task to the Bridge; Bridge runs mock (default) or real Claude.
+        br = self.bridge.execute({"command": p.get("command"), "target": p.get("target"),
+                                  "correlation_id": cid, "task_id": p.get("task_id")})
+        # carry bridge mode + real_claude_connected into the persisted result
+        result = dict(br.get("result") or {})
+        result["mode"] = br.get("mode")
+        result["real_claude_connected"] = br.get("real_claude_connected", False)
+        if br.get("status") != "SUCCEEDED":
+            self.store.put({"correlation_id": cid, "status": br.get("status", rs.FAILED),
+                            "error": br.get("error", "bridge failure"), "result": result,
                             "worker": ctx.actor, "capability": ctx.capability})
-            raise  # let ExecutionEngine record FAILED/metrics too
-        self.store.put({"correlation_id": cid, "status": rs.SUCCEEDED, "result": output,
+            raise RuntimeError(br.get("error") or f"bridge status {br.get('status')}")
+        self.store.put({"correlation_id": cid, "status": rs.SUCCEEDED, "result": result,
                         "worker": ctx.actor, "capability": ctx.capability})
-        return output
+        return result
 
     # ---- Console → Queue ----
     def submit(self, command: str, target: str, task_id: Optional[str] = None,
