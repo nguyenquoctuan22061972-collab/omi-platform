@@ -18,6 +18,7 @@ Thuần stdlib.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -119,11 +120,24 @@ class Bridge:
             return self._fail(REAL, f"{type(e).__name__}: {e}")
 
         rc = res.get("returncode", 1)
-        stdout = (res.get("stdout") or "")[: self.output_limit]
-        if rc != 0:
-            return self._fail(REAL, f"claude exit {rc}: {(res.get('stderr') or '')[:500]}")
+        stdout = res.get("stdout") or ""
+        stderr = res.get("stderr") or ""
+        # The CLI can report failure INSIDE json stdout (is_error) even with rc==0
+        # (e.g. "Not logged in"). Treat that as a failure and surface the message.
+        parsed = None
+        try:
+            parsed = json.loads(stdout)
+        except Exception:
+            parsed = None
+        cli_error = isinstance(parsed, dict) and bool(parsed.get("is_error"))
+        if rc != 0 or cli_error:
+            msg = ""
+            if isinstance(parsed, dict):
+                msg = str(parsed.get("result") or parsed.get("error") or "")
+            msg = msg or stderr[:500]
+            return self._fail(REAL, f"claude failed (rc={rc}): {msg}"[:600])
         # Success ONLY here → real_claude_connected True.
-        return {"mode": REAL, "status": "SUCCEEDED", "result": {"raw": stdout},
+        return {"mode": REAL, "status": "SUCCEEDED", "result": {"raw": stdout[: self.output_limit]},
                 "error": "", "real_claude_connected": True}
 
     # ---- helpers ----

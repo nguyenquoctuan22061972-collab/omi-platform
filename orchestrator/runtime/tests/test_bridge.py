@@ -99,7 +99,17 @@ class TestBridgeRealWiring(unittest.TestCase):
         r = b.execute({"command": "build", "target": "staging_ws"})
         self.assertEqual(r["status"], "FAILED")
         self.assertFalse(r["real_claude_connected"])
-        self.assertIn("exit 2", r["error"])
+        self.assertIn("rc=2", r["error"])
+        self.assertIn("boom", r["error"])
+
+    def test_cli_is_error_in_stdout_is_failure(self):
+        # CLI exits 0 but JSON says is_error (e.g. "Not logged in") → must be FAILED, not connected
+        b, _ = self._bridge(lambda a, c, t: {"returncode": 0, "stderr": "",
+                "stdout": '{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}'})
+        r = b.execute({"command": "build", "target": "staging_ws"})
+        self.assertEqual(r["status"], "FAILED")
+        self.assertFalse(r["real_claude_connected"])
+        self.assertIn("Not logged in", r["error"])
 
     def test_output_is_capped(self):
         big = "x" * 100000
