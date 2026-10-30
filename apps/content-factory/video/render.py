@@ -28,6 +28,7 @@ PlayResY: 1080
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Sub,DejaVu Sans,54,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,2,120,120,70,1
+Style: End,DejaVu Serif,80,&H0066CCFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,2,8,60,60,140,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -73,15 +74,15 @@ def ass_events(chunks: List[Tuple[str, float, float]], limit: float) -> List[str
     return lines
 
 
-def scene_spans(scenes: List[Dict], total: float, limit: float) -> List[Tuple[str, float, float]]:
-    """(ảnh, bắt đầu, kết thúc) cho từng cảnh, cắt ở limit."""
+def scene_spans(scenes: List[Dict], total: float, limit: float) -> List[Tuple[Dict, float, float]]:
+    """(cảnh, bắt đầu, kết thúc) cho từng cảnh, cắt ở limit."""
     spans = []
     for k, sc in enumerate(scenes):
         t0 = sc["start"]
         if t0 >= limit:
             break
         t1 = scenes[k + 1]["start"] if k + 1 < len(scenes) else total
-        spans.append((sc["image"], t0, min(t1, limit)))
+        spans.append((sc, t0, min(t1, limit)))
     return spans
 
 
@@ -114,6 +115,26 @@ def kenburns_filter(idx: int, dur: float) -> str:
             f"fade=t=in:st=0:d=0.4,fade=t=out:st={max(dur - 0.4, 0):.2f}:d=0.4,format=yuv420p")
 
 
+def slowdown(available: float, needed: float, max_factor: float = 1.6) -> float:
+    """Hệ số làm chậm clip stock để phủ đủ cảnh; phần còn thiếu sẽ được lặp lại."""
+    if available <= 0:
+        return 1.0
+    return min(max(needed / available, 1.0), max_factor)
+
+
+def video_filter(factor: float, dur: float) -> str:
+    return (f"setpts={factor:.4f}*PTS,fps={FPS},scale=1920:1080:force_original_aspect_ratio=increase,"
+            f"crop=1920:1080,setsar=1,fade=t=in:st=0:d=0.4,"
+            f"fade=t=out:st={max(dur - 0.4, 0):.2f}:d=0.4,format=yuv420p")
+
+
+def end_card_event(text: str, total: float, limit: float, secs: float = 5.5) -> List[str]:
+    start = max(total - secs, 0)
+    if start >= limit:
+        return []
+    return [f"Dialogue: 1,{ass_time(start)},{ass_time(limit)},End,,0,0,0,,{{\\fad(600,300)}}{text}"]
+
+
 def duration(path: str) -> float:
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries",
                                           "format=duration", "-of", "csv=p=0", path]))
@@ -132,15 +153,27 @@ def render(ep_dir: str, preview: float = 0.0) -> str:
         words = json.load(f)["words"]
     subs = os.path.join(out_dir, "subs.ass")
     with open(subs, "w") as f:
-        f.write(ASS_HEAD + "\n".join(ass_events(subtitle_chunks(words), limit)) + "\n")
+        events = ass_events(subtitle_chunks(words), limit)
+        if ep.get("end_card"):
+            events += end_card_event(ep["end_card"], total, limit)
+        f.write(ASS_HEAD + "\n".join(events) + "\n")
 
     clips = []
-    for k, (name, t0, t1) in enumerate(scene_spans(ep["scenes"], total, limit)):
+    enc = ["-t", None, "-r", str(FPS), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+    for k, (sc, t0, t1) in enumerate(scene_spans(ep["scenes"], total, limit)):
         clip = os.path.join(out_dir, f"c{k:02d}.mp4")
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-loop", "1",
-                        "-i", resolve_image(ep, name), "-vf", kenburns_filter(k, t1 - t0),
-                        "-t", f"{t1 - t0:.3f}", "-r", str(FPS), "-c:v", "libx264",
-                        "-preset", "veryfast", "-crf", "20", clip], check=True)
+        dur = t1 - t0
+        enc[1] = f"{dur:.3f}"
+        if sc.get("video"):
+            src = os.path.join(ep_dir, sc["video"])
+            offset = sc.get("offset", 0.0)
+            factor = slowdown(duration(src) - offset, dur)
+            cmd = ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1", "-ss", f"{offset:.2f}",
+                   "-i", src, "-vf", video_filter(factor, dur)] + enc + [clip]
+        else:
+            cmd = ["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i",
+                   resolve_image(ep, sc["image"]), "-vf", kenburns_filter(k, dur)] + enc + [clip]
+        subprocess.run(cmd, check=True)
         clips.append(clip)
     concat = os.path.join(out_dir, "list.txt")
     with open(concat, "w") as f:

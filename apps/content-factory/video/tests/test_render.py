@@ -5,7 +5,8 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from render import ass_events, ass_time, resolve_image, scene_spans, subtitle_chunks  # noqa: E402
+from render import (ass_events, ass_time, end_card_event, resolve_image, scene_spans, slowdown,  # noqa: E402
+                    subtitle_chunks)
 
 
 def w(text, start, end):
@@ -39,11 +40,22 @@ class TestSubtitles(unittest.TestCase):
 class TestScenes(unittest.TestCase):
     def test_spans_cover_until_total(self):
         scenes = [{"start": 0, "image": "s01"}, {"start": 4, "image": "s02"}]
-        self.assertEqual(scene_spans(scenes, 10, 10), [("s01", 0, 4), ("s02", 4, 10)])
+        spans = [(sc["image"], a, b) for sc, a, b in scene_spans(scenes, 10, 10)]
+        self.assertEqual(spans, [("s01", 0, 4), ("s02", 4, 10)])
 
     def test_spans_cut_at_preview(self):
         scenes = [{"start": 0, "image": "s01"}, {"start": 4, "image": "s02"}, {"start": 9, "image": "s03"}]
-        self.assertEqual(scene_spans(scenes, 20, 6), [("s01", 0, 4), ("s02", 4, 6)])
+        spans = [(sc["image"], a, b) for sc, a, b in scene_spans(scenes, 20, 6)]
+        self.assertEqual(spans, [("s01", 0, 4), ("s02", 4, 6)])
+
+    def test_slowdown_capped(self):
+        self.assertEqual(slowdown(10, 5), 1.0)
+        self.assertAlmostEqual(slowdown(8, 10), 1.25)
+        self.assertEqual(slowdown(4, 20), 1.6)
+
+    def test_end_card_only_in_last_seconds(self):
+        self.assertEqual(len(end_card_event("Subscribe", total=100, limit=100)), 1)
+        self.assertEqual(end_card_event("Subscribe", total=100, limit=60), [])
 
     def test_fallback_image(self):
         with tempfile.TemporaryDirectory() as d:

@@ -13,26 +13,133 @@
     "Leo": "boy, 12, messy dark hair, school sweater"
   },
   "scenes": [
-    {"start": 0.0,    "image": "s01", "prompt": "Mia rides a scooter through a rainy city street at midnight, neon reflections"},
-    {"start": 4.0,    "image": "s02", "prompt": "close-up: Mia's wet hands hold a single crumpled twenty-dollar bill"},
-    {"start": 17.48,  "image": "s03", "prompt": "small kitchen at dusk, Mia helps Leo with homework, framed photo of their late father"},
-    {"start": 30.24,  "image": "s04", "prompt": "Mia beside her parked scooter in the rain, exhausted, looking at a glowing phone"},
-    {"start": 38.36,  "image": "s05", "prompt": "wide: Walter alone on a bus-stop bench in heavy rain, holding a hospital wristband"},
-    {"start": 49.44,  "image": "s06", "prompt": "Mia kneels in front of Walter at the bus stop, speaking gently (character anchor)"},
-    {"start": 51.04,  "image": "s07", "prompt": "close-up: Walter's red, tearful eyes, raindrops on his glasses"},
-    {"start": 63.92,  "image": "s08", "prompt": "Mia looks down at the twenty-dollar bill, hesitating"},
-    {"start": 72.76,  "image": "s09", "prompt": "Mia wraps her yellow jacket around Walter's shoulders, taxi headlights approaching"},
-    {"start": 82.32,  "image": "s10", "prompt": "Walter holds Mia's hand through the open taxi window"},
-    {"start": 88.68,  "image": "s11", "prompt": "taxi tail lights disappearing into the rain, Mia standing in her hoodie"},
-    {"start": 91.68,  "image": "s12", "prompt": "Mia rides home in the rain without a jacket, shivering but smiling softly"},
-    {"start": 100.24, "image": "s13", "prompt": "morning, apartment door opens, Walter holds the folded yellow jacket"},
-    {"start": 107.0,  "image": "s14", "prompt": "Walter speaks softly with tears, Mia in the doorway, morning light"},
-    {"start": 115.44, "image": "s15", "prompt": "Walter hands Mia an old envelope"},
-    {"start": 124.48, "image": "s16", "prompt": "faded 1980s photograph: young teacher beside a little boy holding a school trophy"},
-    {"start": 134.84, "image": "s17", "prompt": "Walter at the kitchen table telling the story, Mia and Leo listening"},
-    {"start": 156.0,  "image": "s18", "prompt": "Walter places a paid school-trip receipt on the table, Leo surprised"},
-    {"start": 165.92, "image": "s19", "prompt": "Mia hugs Walter, warm sunlight, father's framed photo in the background"},
-    {"start": 173.2,  "image": "s20", "prompt": "sunrise over the city after rain, hopeful (outro)"}
+    {
+      "start": 0.0,
+      "image": "s01",
+      "prompt": "Mia rides a scooter through a rainy city street at midnight"
+    },
+    {
+      "start": 4.0,
+      "image": "s02",
+      "prompt": "close-up: Mia's wet hands hold a crumpled twenty-dollar bill"
+    },
+    {
+      "start": 17.48,
+      "video": "broll/rain_street.mp4",
+      "note": "city at night — she works nights"
+    },
+    {
+      "start": 24.0,
+      "video": "broll/flooded_car.mp4",
+      "note": "night traffic in the rain"
+    },
+    {
+      "start": 30.24,
+      "video": "broll/raindrops_road.mp4",
+      "note": "order cancelled, soaked"
+    },
+    {
+      "start": 38.36,
+      "image": "s05",
+      "prompt": "crop of s06: Walter alone on the bench"
+    },
+    {
+      "start": 49.44,
+      "image": "s06",
+      "prompt": "Mia kneels in front of Walter (character anchor)"
+    },
+    {
+      "start": 51.04,
+      "image": "s07",
+      "prompt": "crop of s06: close-up of Walter"
+    },
+    {
+      "start": 63.92,
+      "image": "s02",
+      "prompt": "Mia looks at the twenty dollars"
+    },
+    {
+      "start": 72.76,
+      "image": "s09",
+      "prompt": "Mia wraps her yellow jacket around Walter, taxi headlights"
+    },
+    {
+      "start": 82.32,
+      "image": "s06",
+      "prompt": "he held her hand tightly"
+    },
+    {
+      "start": 88.68,
+      "video": "broll/taxi_rain.mp4",
+      "offset": 20.0,
+      "note": "taxi disappears into the rain"
+    },
+    {
+      "start": 91.68,
+      "image": "s01",
+      "prompt": "Mia rides home in the rain"
+    },
+    {
+      "start": 100.24,
+      "video": "broll/knock.mp4",
+      "note": "knock at the door"
+    },
+    {
+      "start": 104.4,
+      "image": "s09",
+      "prompt": "memory: her jacket"
+    },
+    {
+      "start": 109.44,
+      "video": "broll/hands_couple.mp4",
+      "offset": 7.0,
+      "note": "held my wife's hand"
+    },
+    {
+      "start": 115.44,
+      "video": "broll/photos_old.mp4",
+      "note": "old envelope / box of memories"
+    },
+    {
+      "start": 124.48,
+      "video": "broll/photos_look.mp4",
+      "note": "faded photograph of a little boy"
+    },
+    {
+      "start": 134.84,
+      "image": "s07",
+      "prompt": "Walter tells the story"
+    },
+    {
+      "start": 146.0,
+      "video": "broll/photos_old.mp4",
+      "offset": 4.0,
+      "note": "letters every Christmas"
+    },
+    {
+      "start": 153.68,
+      "image": "s05",
+      "prompt": "his daughter did"
+    },
+    {
+      "start": 156.0,
+      "image": "s09",
+      "prompt": "kindness returns — the yellow jacket"
+    },
+    {
+      "start": 165.92,
+      "image": "s06",
+      "prompt": "Mia and Walter — kindness came home"
+    },
+    {
+      "start": 173.2,
+      "video": "broll/sunrise2.mp4",
+      "offset": 30.0,
+      "note": "sunrise after the rain (outro)"
+    }
   ],
-  "fallback": {"s03": "s01", "s04": "s02", "s05": "s06", "s07": "s06", "s17": "s14", "s20": "s19"}
+  "end_card": "Subscribe · HeartRise Stories",
+  "credits": [
+    "Stock footage: Pexels (pexels.com) — clips 12570193, 9481660, 9253241, 855432, 6785814, 6657871, 4230107, 7545824, 5809540"
+  ]
 }

@@ -3,3 +3,4 @@ episodes/*/img/
 episodes/*/out/
 episodes/*/*.mp3
 episodes/*/words.json
+episodes/*/broll/
