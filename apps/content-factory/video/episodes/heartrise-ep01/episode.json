@@ -1,0 +1,38 @@
+{
+  "slug": "HeartRise_EP01",
+  "channel": "HeartRise Stories",
+  "title": "She Gave Her Last $20 to a Stranger in the Rain — The Next Morning, He Was at Her Door",
+  "format": "16:9 1080p, ~3 min",
+  "voice": "vo.mp3",
+  "voice_id": "lXiPxoDwq0d2OK7NdaXw",
+  "words": "words.json",
+  "images_dir": "img",
+  "characters": {
+    "Mia": "young woman, 24, slim, dark brown hair, bright yellow rain jacket over a grey hoodie, square food-delivery backpack",
+    "Walter": "frail elderly man, 80, neat white hair, short white beard, round wire glasses, grey knit cardigan",
+    "Leo": "boy, 12, messy dark hair, school sweater"
+  },
+  "scenes": [
+    {"start": 0.0,    "image": "s01", "prompt": "Mia rides a scooter through a rainy city street at midnight, neon reflections"},
+    {"start": 4.0,    "image": "s02", "prompt": "close-up: Mia's wet hands hold a single crumpled twenty-dollar bill"},
+    {"start": 17.48,  "image": "s03", "prompt": "small kitchen at dusk, Mia helps Leo with homework, framed photo of their late father"},
+    {"start": 30.24,  "image": "s04", "prompt": "Mia beside her parked scooter in the rain, exhausted, looking at a glowing phone"},
+    {"start": 38.36,  "image": "s05", "prompt": "wide: Walter alone on a bus-stop bench in heavy rain, holding a hospital wristband"},
+    {"start": 49.44,  "image": "s06", "prompt": "Mia kneels in front of Walter at the bus stop, speaking gently (character anchor)"},
+    {"start": 51.04,  "image": "s07", "prompt": "close-up: Walter's red, tearful eyes, raindrops on his glasses"},
+    {"start": 63.92,  "image": "s08", "prompt": "Mia looks down at the twenty-dollar bill, hesitating"},
+    {"start": 72.76,  "image": "s09", "prompt": "Mia wraps her yellow jacket around Walter's shoulders, taxi headlights approaching"},
+    {"start": 82.32,  "image": "s10", "prompt": "Walter holds Mia's hand through the open taxi window"},
+    {"start": 88.68,  "image": "s11", "prompt": "taxi tail lights disappearing into the rain, Mia standing in her hoodie"},
+    {"start": 91.68,  "image": "s12", "prompt": "Mia rides home in the rain without a jacket, shivering but smiling softly"},
+    {"start": 100.24, "image": "s13", "prompt": "morning, apartment door opens, Walter holds the folded yellow jacket"},
+    {"start": 107.0,  "image": "s14", "prompt": "Walter speaks softly with tears, Mia in the doorway, morning light"},
+    {"start": 115.44, "image": "s15", "prompt": "Walter hands Mia an old envelope"},
+    {"start": 124.48, "image": "s16", "prompt": "faded 1980s photograph: young teacher beside a little boy holding a school trophy"},
+    {"start": 134.84, "image": "s17", "prompt": "Walter at the kitchen table telling the story, Mia and Leo listening"},
+    {"start": 156.0,  "image": "s18", "prompt": "Walter places a paid school-trip receipt on the table, Leo surprised"},
+    {"start": 165.92, "image": "s19", "prompt": "Mia hugs Walter, warm sunlight, father's framed photo in the background"},
+    {"start": 173.2,  "image": "s20", "prompt": "sunrise over the city after rain, hopeful (outro)"}
+  ],
+  "fallback": {"s03": "s01", "s04": "s02", "s05": "s06", "s07": "s06", "s17": "s14", "s20": "s19"}
+}

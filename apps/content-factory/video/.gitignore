@@ -1,0 +1,5 @@
+# Media sinh ra khi dựng — không commit
+episodes/*/img/
+episodes/*/out/
+episodes/*/*.mp3
+episodes/*/words.json
