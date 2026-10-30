@@ -11,3 +11,9 @@ deploy/certs/
 deploy/certbot-www/
 deploy/.last_good_tag
 apps/dashboard/config.js
+
+# Video build artifacts (MP4 + downloaded stock assets + ffmpeg scratch)
+apps/content-factory/episodes/*/build/
+libs/video/tests/_scratch/
+*.mp4
+*.wav

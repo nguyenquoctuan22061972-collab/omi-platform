@@ -68,6 +68,14 @@ jobs:
         working-directory: apps/content-factory/pipeline
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Video lib (PRD-009 E, render real)
+        working-directory: libs/video
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test — HeartRise EP01 storyboard (PRD-009 E)
+        working-directory: apps/content-factory/episodes/heartrise_ep01
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Test — Prompt Registry (PRD-009 B)
         working-directory: libs/prompts
         run: python -m unittest discover -s tests -p 'test_*.py' -v
