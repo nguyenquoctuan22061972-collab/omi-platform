@@ -4,7 +4,7 @@ Interface thống nhất cho tích hợp bên thứ ba. **Dry-run**: không gọ
 credential đọc từ env; không hardcode secret.
 
 ## Provider
-telegram · gmail_smtp · zalo_oa · facebook_messenger · openai · vertex_ai
+telegram · gmail_smtp · zalo_oa · facebook_messenger · openai · vertex_ai · gemini
 
 ## Interface (`base.Adapter`)
 - `name`, `required_env`
@@ -17,6 +17,14 @@ a = get_adapter("telegram", env=os.environ)
 a.health()          # {configured, missing_env, mode:'dry-run'}
 a.send({"text": "hi"})   # {status:'dry-run', ...} — KHÔNG gọi API thật
 ```
+
+## Gemini — kiểm tra thật (opt-in)
+`GeminiAdapter.live_check()` gọi API thật chỉ khi được gọi tường minh; `send()` vẫn dry-run.
+```bash
+GEMINI_MODEL=gemini-2.5-flash python -m libs.integrations.gemini          # models.list, miễn phí
+GEMINI_MODEL=gemini-2.5-flash python -m libs.integrations.gemini --probe  # +1 lệnh ≤8 token
+```
+Khóa đọc từ `GEMINI_API_KEY`, gửi qua header; kết quả phân loại lỗi `auth` / `rate_limit` / `network` / `not_found`.
 
 ## Go-live
 Gắn credential env tương ứng + hiện thực `send()` thật ở phase sau (giữ interface).

@@ -51,7 +51,7 @@ class TestActivation(unittest.TestCase):
 
     def test_report_covers_six(self):
         rep = act.activation_report({})
-        self.assertEqual(len(rep), 6)
+        self.assertEqual(len(rep), 7)
         self.assertTrue(all(r["mode"] == "dry-run" for r in rep))
 
 
