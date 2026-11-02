@@ -1,13 +1,14 @@
 name: Gemini connectivity
 
 # Kiểm tra an toàn, không tốn phí: secret GEMINI_API_KEY có tồn tại không và
-# Gemini API có trả lời không. Chỉ gọi models.list (không sinh nội dung).
-# Khóa gửi qua header, không nằm trong URL; log chỉ in mã HTTP và tên model.
+# GeminiAdapter (libs/integrations/gemini.py) gọi được Gemini API.
+# Chỉ gọi models.list (không sinh nội dung). Khóa gửi qua header, không in ra log.
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - .github/workflows/gemini-connectivity.yml
+      - libs/integrations/gemini.py
 
 permissions:
   contents: read
@@ -27,25 +28,13 @@ jobs:
           fi
           echo "PASS — secret GEMINI_API_KEY tồn tại (độ dài ${#GEMINI_API_KEY} ký tự)"
 
-      - name: Gọi Gemini API models.list (miễn phí)
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: GeminiAdapter.live_check (models.list, miễn phí)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          code=$(curl -sS -o models.json -w '%{http_code}' \
-            -H "x-goog-api-key: ${GEMINI_API_KEY}" \
-            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")
-          echo "HTTP ${code}"
-          if [ "$code" != "200" ]; then
-            python3 -c "import json;d=json.load(open('models.json'));e=d.get('error',{});print('API error:',e.get('code'),e.get('status'),e.get('message','')[:200])" || true
-            echo "::error::FAIL — Gemini API trả HTTP ${code}"
-            exit 1
-          fi
-          python3 - <<'EOF'
-          import json
-          names = [m["name"].split("/", 1)[1] for m in json.load(open("models.json")).get("models", [])]
-          print(f"PASS — Gemini API trả lời, {len(names)} model khả dụng với khóa này")
-          for kw in ("tts", "image", "flash", "pro"):
-              hits = sorted(n for n in names if kw in n)
-              print(f"  [{kw}] {len(hits)}: {', '.join(hits[:12])}")
-          EOF
-          rm -f models.json
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+        run: python -c "from libs.integrations.gemini import main; raise SystemExit(main())"

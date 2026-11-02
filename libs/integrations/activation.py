@@ -18,6 +18,7 @@ ENABLE_FLAG = {
     "facebook_messenger": "FB_PAGE_ENABLED",
     "openai": "OPENAI_ENABLED",
     "vertex_ai": "VERTEX_ENABLED",
+    "gemini": "GEMINI_ENABLED",
 }
 
 

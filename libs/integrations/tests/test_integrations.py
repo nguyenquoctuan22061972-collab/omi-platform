@@ -9,10 +9,10 @@ from libs.integrations import get_adapter, list_adapters, ADAPTERS  # noqa: E402
 
 
 class TestIntegrations(unittest.TestCase):
-    def test_six_providers(self):
+    def test_seven_providers(self):
         self.assertEqual(
             set(list_adapters()),
-            {"telegram", "gmail_smtp", "zalo_oa", "facebook_messenger", "openai", "vertex_ai"},
+            {"telegram", "gmail_smtp", "zalo_oa", "facebook_messenger", "openai", "vertex_ai", "gemini"},
         )
 
     def test_uniform_interface(self):
