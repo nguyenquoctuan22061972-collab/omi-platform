@@ -86,7 +86,8 @@ class TestConnectorContract(unittest.TestCase):
     def test_factory_rejects_unregistered(self):
         self.assertIsInstance(get_connector("awin"), AwinAdapter)
         self.assertIsInstance(get_connector("affiliate_network"), AffiliateNetworkAdapter)
-        for not_yet in ("impact", "impact.com", "amazon", "shopee", "tiktok", "youtube"):
+        # impact is now registered (AFFOS.1); the rest remain unregistered.
+        for not_yet in ("impact.com", "amazon", "shopee", "tiktok", "youtube"):
             with self.assertRaises(ValueError):
                 get_connector(not_yet)
 

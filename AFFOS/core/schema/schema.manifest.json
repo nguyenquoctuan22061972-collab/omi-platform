@@ -27,6 +27,12 @@
   "count": 21,
   "migrations": [
     "0001_affos_core.sql",
-    "0002_rls.sql"
-  ]
+    "0002_rls.sql",
+    "0003_provenance.sql"
+  ],
+  "notes": {
+    "production_schema": "Postgres: all 21 tables above via 0001; RLS via 0002; provenance columns (source, source_record_id, data_state, currency, fetched_at, is_verified) via 0003.",
+    "test_adapter": "core/data_access.py (SQLite) creates a SMALLER subset of tables for the dry-run pipeline/tests; it is NOT the production schema. Production writes use repository.PostgresRepository only.",
+    "apply_order": "0001 -> 0002 -> 0003 as affos_owner; requires `CREATE EXTENSION pgcrypto` for gen_random_uuid()."
+  }
 }

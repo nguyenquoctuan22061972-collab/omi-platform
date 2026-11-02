@@ -23,9 +23,12 @@ CREATE TABLE IF NOT EXISTS conversion_events (id TEXT PRIMARY KEY, click_event_i
 CREATE TABLE IF NOT EXISTS commissions (id TEXT PRIMARY KEY, conversion_event_id TEXT, amount REAL, status TEXT DEFAULT 'confirmed', {_PROV});
 CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, campaign_id TEXT, category TEXT, amount REAL, {_PROV});
 CREATE TABLE IF NOT EXISTS revenue (id TEXT PRIMARY KEY, source_ref TEXT, amount REAL, revenue_label TEXT, {_PROV});
+CREATE TABLE IF NOT EXISTS experiments (id TEXT PRIMARY KEY, campaign_id TEXT, hypothesis TEXT, variant TEXT, metric TEXT, status TEXT DEFAULT 'DRAFT', created_at TEXT);
+CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY, event TEXT, actor TEXT, target TEXT, meta TEXT, ts TEXT);
 """
 CHAIN_TABLES = ["products", "offers", "campaigns", "tracking_links",
-                "click_events", "conversion_events", "commissions", "expenses", "revenue"]
+                "click_events", "conversion_events", "commissions", "expenses", "revenue",
+                "experiments", "audit_logs"]
 # Bảng có cột provenance (bắt buộc data_state khi insert).
 PROV_TABLES = {"offers", "click_events", "conversion_events", "commissions", "expenses", "revenue"}
 _SQLITE_STATES = {"TEST", "DRY_RUN", "SEEDED"}

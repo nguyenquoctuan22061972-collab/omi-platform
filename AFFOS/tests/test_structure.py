@@ -25,13 +25,15 @@ class TestAFFOS(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "constitution", "PRINCIPLES.md")))
 
     def test_manifest_reuse_pointers_exist(self):
-        m = json.load(open(os.path.join(ROOT, "affos.manifest.json")))["modules"]
+        with open(os.path.join(ROOT, "affos.manifest.json")) as f:
+            m = json.load(f)["modules"]
         for path, reuse in m.items():
             self.assertTrue(os.path.exists(os.path.join(REPO, reuse)),
                             f"reuse pointer không tồn tại: {path} -> {reuse}")
 
     def test_every_module_dir_has_readme(self):
-        m = json.load(open(os.path.join(ROOT, "affos.manifest.json")))["modules"]
+        with open(os.path.join(ROOT, "affos.manifest.json")) as f:
+            m = json.load(f)["modules"]
         for path in m:
             self.assertTrue(os.path.isfile(os.path.join(ROOT, path, "README.md")), path)
 
