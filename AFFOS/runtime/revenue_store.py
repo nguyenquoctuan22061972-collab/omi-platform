@@ -91,9 +91,12 @@ class RevenueStore:
     def reserve(self, idem_key: str, body_hash: str) -> Tuple[str, Optional[Dict]]:
         """Atomically reserve a key. Returns:
           ("new", None)            — caller should run and then commit_response()
-          ("replay", response)     — same key + same body already processed
+          ("replay", response)     — same key + same body already COMPLETED (response stored)
+          ("pending", None)        — same key + same body reserved but NOT yet completed
+                                      (another request in-flight, or a process died between reserve
+                                      and commit_response). Never return a null cached response.
           ("conflict", None)       — same key + different body
-        """
+        A stale "pending" row is reclaimed by the retention job (see 0004), not silently returned."""
         cur = self.conn.cursor()
         cur.execute(self._q(
             "INSERT INTO ingestion_idempotency (idem_key, body_hash, response, created_at) "
@@ -108,7 +111,9 @@ class RevenueStore:
         stored_hash, resp = (row[0], row[1]) if not isinstance(row, dict) else (row["body_hash"], row["response"])
         if stored_hash != body_hash:
             return "conflict", None
-        return "replay", (json.loads(resp) if resp else None)
+        if resp is None:
+            return "pending", None                 # reserved but not completed — do NOT cache null
+        return "replay", json.loads(resp)
 
     def commit_response(self, idem_key: str, response: Dict) -> None:
         cur = self.conn.cursor()

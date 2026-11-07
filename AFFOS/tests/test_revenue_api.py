@@ -225,6 +225,15 @@ class TestStoreBacked(unittest.TestCase):
                              {"Authorization": _tok(["Admin"]), "Idempotency-Key": "dk1"})
         self.assertEqual(c3, 409)
 
+    def test_pending_reservation_returns_409_not_null(self):
+        # Simulate a prior request that reserved the key but died before completing (response NULL).
+        import hashlib
+        body = _body()
+        self.store.reserve("dk2", hashlib.sha256(body).hexdigest())      # reserved, not committed
+        code, r = self._ingest(body, {"Authorization": _tok(["Admin"]), "Idempotency-Key": "dk2"})
+        self.assertEqual(code, 409)                                      # not a null-body 200
+        self.assertIn("processed", r["error"])
+
 
 class TestRevenueReport(unittest.TestCase):
     def test_report_requires_auth(self):

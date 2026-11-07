@@ -313,6 +313,11 @@ def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
                 return 200, cached
             if state == "conflict":
                 return 409, {"error": "Idempotency-Key reused with a different body", "idempotency_key": idem_key}
+            if state == "pending":
+                # Same key+body reserved but not yet completed (in-flight, or a crashed prior run).
+                # Never return a null cached body; signal the caller to retry.
+                return 409, {"error": "request with this Idempotency-Key is still being processed",
+                             "idempotency_key": idem_key}
             reserved = True
         else:
             prior = idem_store.get(idem_key)

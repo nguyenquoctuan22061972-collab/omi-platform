@@ -47,7 +47,17 @@ class TestIdempotency(unittest.TestCase):
         _, st = _fresh_store()
         results = [st.reserve("k1", "hashA")[0] for _ in range(5)]
         self.assertEqual(results.count("new"), 1)        # exactly one request "wins"
-        self.assertTrue(all(r in ("new", "replay") for r in results))
+        # the rest are "pending" (reserved, not yet completed) — never a null "replay"
+        self.assertTrue(all(r in ("new", "pending") for r in results))
+
+    def test_pending_then_replay_after_complete(self):
+        _, st = _fresh_store()
+        self.assertEqual(st.reserve("k1", "hashA")[0], "new")      # reserved, not committed
+        state, cached = st.reserve("k1", "hashA")
+        self.assertEqual(state, "pending")                          # in-flight / crashed prior run
+        self.assertIsNone(cached)                                   # no null response cached
+        st.commit_response("k1", {"ok": 1})
+        self.assertEqual(st.reserve("k1", "hashA"), ("replay", {"ok": 1}))
 
     def test_persistence_across_restart(self):
         with tempfile.TemporaryDirectory() as d:
