@@ -16,9 +16,14 @@ docker compose -f deploy/docker-compose.staging.yml --env-file deploy/.env.stagi
 #    0002/0004 need on a vanilla Postgres, plus least-privilege affos_owner (DDL) / affos_service (DML):
 #      psql "$SUPERUSER_URL" -f deploy/postgres/roles.sql
 #      # then set role passwords out of band (see the bottom of roles.sql).
-# 2) Apply migrations as the OWNER role, in order 0001 → 0002 → 0003 → 0004 (see the apply-0004 runbook:
-#    backup → restore test → duplicate pre-check → apply → verify).
+# 2) Apply migrations as the OWNER role (affos_owner), in order 0001 → 0002 → 0003 → 0004 → 0005
+#    (see the apply-0004 runbook: backup → restore test → duplicate pre-check → apply → verify).
+#    0005 grants the least-privilege runtime role (affos_service) INSERT/UPDATE on the operational
+#    store tables ONLY (ingestion_approvals/idempotency, audit_logs) — no BYPASSRLS, no DDL.
 ```
+The runtime durable store (approvals/idempotency/audit) is **Postgres** (0004/0005 tables) via
+`DATABASE_URL` (role `affos_service`) — not SQLite. Migrations run as `affos_owner`; the bootstrap
+superuser runs `roles.sql` once. n8n never gets a DB credential.
 
 ## Backup / restore
 - Backup before migration: `pg_dump "$OWNER_URL" --format=custom -f affos_pre<ts>.dump` (store off-box).

@@ -73,6 +73,9 @@ class RevenueStore:
     def __init__(self, conn, placeholder: str = "?"):
         self.conn = conn
         self.ph = placeholder
+        # On Postgres the idempotency.response column is jsonb; a json string param needs an explicit
+        # ::jsonb cast, and reads come back already-parsed. SQLite stores/returns plain TEXT.
+        self._jsonb = "::jsonb" if placeholder == "%s" else ""
 
     # ---- schema (SQLite/dry-run convenience; prod uses the 0004 migration) ----
     def init_schema(self, with_commission_unique: bool = True) -> None:
@@ -113,11 +116,13 @@ class RevenueStore:
             return "conflict", None
         if resp is None:
             return "pending", None                 # reserved but not completed — do NOT cache null
-        return "replay", json.loads(resp)
+        # SQLite returns TEXT (str); Postgres jsonb returns an already-parsed dict/list.
+        return "replay", (resp if isinstance(resp, (dict, list)) else json.loads(resp))
 
     def commit_response(self, idem_key: str, response: Dict) -> None:
         cur = self.conn.cursor()
-        cur.execute(self._q("UPDATE ingestion_idempotency SET response = ? WHERE idem_key = ?"),
+        cur.execute(self._q("UPDATE ingestion_idempotency SET response = ?" + self._jsonb
+                            + " WHERE idem_key = ?"),
                     (json.dumps(response, ensure_ascii=False), idem_key))
         self.conn.commit()
 

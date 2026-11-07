@@ -1,6 +1,7 @@
 """Auth service — register/login/logout/refresh/me (PRD-002 §3)."""
 from __future__ import annotations
 
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -48,11 +49,16 @@ def get_roles(conn: sqlite3.Connection, user_id: str) -> List[str]:
 
 def _issue_access(conn, user_row, secret: str, access_ttl: int) -> str:
     roles = get_roles(conn, user_row["id"])
-    return jwt_util.encode(
-        {"sub": user_row["id"], "username": user_row["username"], "roles": roles},
-        secret,
-        expires_in=access_ttl,
-    )
+    claims = {"sub": user_row["id"], "username": user_row["username"], "roles": roles}
+    # Stamp issuer/audience when configured (AUTH_JWT_ISS / AUTH_JWT_AUD). Staging sets both so the
+    # AFFOS runtime can enforce them; absent config, tokens stay backward-compatible (no iss/aud).
+    iss = os.environ.get("AUTH_JWT_ISS")
+    if iss:
+        claims["iss"] = iss
+    aud = os.environ.get("AUTH_JWT_AUD")
+    if aud:
+        claims["aud"] = aud
+    return jwt_util.encode(claims, secret, expires_in=access_ttl)
 
 
 def login(conn, username: str, password: str, secret: str, access_ttl: int = 900) -> Dict:

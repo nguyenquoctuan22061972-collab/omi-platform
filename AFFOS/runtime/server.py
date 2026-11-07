@@ -42,20 +42,29 @@ _STORE_BUILT = False
 
 
 def _get_store():
-    """Durable RevenueStore from AFFOS_INGEST_DB (sqlite path) if configured; else None (in-memory).
-    Lazily built once per process. Production would point this at Postgres via the 0004 migration."""
+    """Durable RevenueStore, built once per process. Preference:
+      1. Postgres (DATABASE_URL/SUPABASE_DB_URL) — approvals/idempotency/audit live in the 0004/0005
+         tables; schema is owned by the migration, so the runtime role does NO DDL here.
+      2. SQLite (AFFOS_INGEST_DB) — durable on a volume for dev/dry-run without a DB.
+      3. None — in-memory fallback (pure dry-run)."""
     global _STORE, _STORE_BUILT
     if _STORE_BUILT:
         return _STORE
     _STORE_BUILT = True
+    import revenue_store
+    url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+    if url:
+        import psycopg
+        conn = psycopg.connect(url)                     # tables come from migration (no init_schema)
+        _STORE = revenue_store.RevenueStore(conn, "%s")
+        return _STORE
     path = os.environ.get("AFFOS_INGEST_DB")
     if path:
         import sqlite3
-        import revenue_store
         conn = sqlite3.connect(path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         st = revenue_store.RevenueStore(conn, "?")
-        st.init_schema(with_commission_unique=False)   # ingest DB has no financial tables
+        st.init_schema(with_commission_unique=False)   # SQLite dev store: create its own tables
         _STORE = st
     return _STORE
 
