@@ -23,6 +23,7 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
         "user:manage",
         "revenue:read",
         "revenue:ingest",
+        "revenue:approve",
     },
 }
 

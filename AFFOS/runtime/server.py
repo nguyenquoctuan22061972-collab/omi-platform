@@ -71,8 +71,11 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/affos/revenue/ingest":
             import revenue_api
-            body = self._read_body()
-            code, payload = revenue_api.handle_ingest(body, self.headers, os.environ)
+            code, payload = revenue_api.handle_ingest(self._read_body(), self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
+        elif path == "/affos/revenue/approve":
+            import revenue_api
+            code, payload = revenue_api.handle_grant(self._read_body(), self.headers, os.environ)
             self._send(code, _json_bytes(payload))
         else:
             self._send(404, b'{"error":"not found"}')

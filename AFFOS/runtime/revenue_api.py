@@ -1,26 +1,31 @@
-"""AFFOS Revenue Ingestion API (SPRINT S2/S3 — additive, DRY-RUN by construction).
+"""AFFOS Revenue Ingestion API (S2/S3 + Phase-3 v2 revision — additive, DRY-RUN by construction).
 
-Exposes two HTTP operations (wired into runtime/server.py):
+HTTP operations (wired into runtime/server.py):
 
-  POST /affos/revenue/ingest   — trigger an affiliate ingestion run.
-  GET  /affos/revenue/report   — read-only revenue/proof summary.
+  POST /affos/revenue/ingest    — trigger an affiliate ingestion run.
+  POST /affos/revenue/approve   — grant a scoped, expiring live-ingest approval.
+  GET  /affos/revenue/report    — read-only revenue/proof summary.
 
-Design invariants (reuse > additive > no-fork):
-  - AuthZ reuses apps/auth-rbac (JWT HS256 + RBAC matrix). Permission `revenue:ingest`
-    for POST, `revenue:read` for GET. Secret from env AUTH_SECRET only (never logged).
-  - The ingest handler NEVER supplies a production transport, so run_ingestion() can only
-    STOP/dry-run — it cannot make a live affiliate call from this endpoint (that is a later
-    sprint). No secret is read or printed.
-  - Impact is OFF (CTO): provider "impact" is recognised but rejected 403 until re-approved.
-  - Idempotency: an `Idempotency-Key` request header dedupes retried calls (replay -> 409).
-    Row-level dedupe is the DB's job (source_record_id upsert), unchanged here.
-  - Audit: every attempt appends an audit record (event=revenue_ingest).
+Phase-3 v2 design invariants (see design doc):
+  1. NO `approved` in the request body. Live runs require a SERVER-SIDE approval record that is
+     provider+environment scoped, time-windowed and expiring (granted via /approve with the
+     `revenue:approve` permission). The ingest endpoint can never self-approve.
+  2. Two-layer idempotency: request `Idempotency-Key` (replay SAME body -> cached 200; DIFFERENT
+     body + same key -> 409). Row-level dedupe stays the DB's job (deterministic id upsert).
+  3. AuthZ reuses apps/auth-rbac (JWT HS256 + RBAC). `revenue:ingest` for ingest, `revenue:read`
+     for report, `revenue:approve` for grant. Secret from env AUTH_SECRET only (never logged).
+  4. Impact is OFF (CTO): provider "impact" -> 403 until re-approved. No auto-promotion.
+  5. Request size limit (413) and per-token rate limit (429 + Retry-After).
 
-Pure stdlib. Handlers are socket-free and unit-testable: they take raw body + a headers
-mapping and return (status_code, dict).
+The ingest handler NEVER supplies a production transport, so run_ingestion() can only STOP/dry-run;
+no live affiliate call is possible from this endpoint (a later sprint wires the transport).
+
+Durable stores (approvals / idempotency / rate window) are process-local here — production persists
+them in the DB (requires a migration, out of this code-only sprint). No secret is read or printed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -32,15 +37,21 @@ _AUTH_SRC = os.path.abspath(os.path.join(_HERE, "..", "..", "apps", "auth-rbac",
 
 REVENUE_INGEST_PERMISSION = "revenue:ingest"
 REVENUE_READ_PERMISSION = "revenue:read"
+REVENUE_APPROVE_PERMISSION = "revenue:approve"
 
-# Providers recognised by validation; "impact" is recognised-but-disabled (CTO: Impact OFF).
 RECOGNISED_PROVIDERS = ("awin", "impact")
-DISABLED_PROVIDERS = ("impact",)
+DISABLED_PROVIDERS = ("impact",)                 # CTO: Impact OFF (no auto-promotion)
 VALID_MODES = ("dry-run", "live")
 
-# Process-local defaults (fine for S1–S4 dry-run; production would persist these in the DB).
-_DEFAULT_IDEM_STORE: Dict[str, Dict] = {}
+MAX_BODY_BYTES = 65536                            # 64 KiB — ingest bodies are tiny
+RATE_LIMIT_PER_MIN = 30
+RATE_WINDOW_S = 60
+
+# Process-local stores (production persists these in the DB).
+_DEFAULT_IDEM_STORE: Dict[str, Dict] = {}        # key -> {"body_hash", "response"}
 _DEFAULT_AUDIT: List[Dict] = []
+_DEFAULT_APPROVALS: List[Dict] = []
+_DEFAULT_RATE: Dict[str, List[float]] = {}
 
 
 class AuthFailure(Exception):
@@ -50,8 +61,13 @@ class AuthFailure(Exception):
         self.message = message
 
 
-def _now() -> str:
+def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _mono() -> float:
+    import time
+    return time.monotonic()
 
 
 def bearer_from_header(authorization: str) -> str:
@@ -85,14 +101,12 @@ def _default_ingest(provider: str, env: Mapping[str, str], start: str, end: str,
         import awin_ingest  # noqa: E402  (reused entrypoint)
         return awin_ingest.run_ingestion(env, start=start, end=end, approved=approved,
                                          transport=transport)
-    # provider == "impact" never reaches here (disabled earlier); kept for completeness.
-    import impact_ingest  # noqa: E402
+    import impact_ingest  # noqa: E402  (unreached: impact disabled earlier)
     return impact_ingest.run_ingestion(env, start=start, end=end, approved=approved,
                                        transport=transport)
 
 
 def _looks_iso8601(value: str) -> bool:
-    """Lightweight ISO-8601 date/datetime check (no timezone math, no network)."""
     v = (value or "").strip()
     if len(v) < 10:
         return False
@@ -103,16 +117,120 @@ def _looks_iso8601(value: str) -> bool:
         return False
 
 
+def _environment(env: Mapping[str, str]) -> str:
+    return env.get("AFFOS_ENVIRONMENT", "production")
+
+
+def is_approved(provider: str, environment: str, now: datetime,
+                approvals: List[Dict]) -> bool:
+    """An active approval for (provider, environment) whose validity window contains `now` and
+    whose expiry has not passed. Provider-scoped -> an AWIN approval never covers Impact."""
+    for a in approvals:
+        if a.get("status") != "active":
+            continue
+        if a.get("provider") != provider or a.get("environment") != environment:
+            continue
+        try:
+            ws = datetime.fromisoformat(a["window_start"].replace("Z", "+00:00"))
+            we = datetime.fromisoformat(a["window_end"].replace("Z", "+00:00"))
+            exp = datetime.fromisoformat(a["expires_at"].replace("Z", "+00:00"))
+        except (KeyError, ValueError):
+            continue
+        if ws <= now <= we and now < exp:
+            return True
+    return False
+
+
+def _rate_limited(subject: str, store: Dict[str, List[float]], clock: Callable[[], float]) -> bool:
+    now = clock()
+    hits = [t for t in store.get(subject, []) if now - t < RATE_WINDOW_S]
+    if len(hits) >= RATE_LIMIT_PER_MIN:
+        store[subject] = hits
+        return True
+    hits.append(now)
+    store[subject] = hits
+    return False
+
+
+def handle_grant(raw_body: bytes, headers: Mapping[str, str],
+                 env: Optional[Mapping[str, str]] = None, *,
+                 verify: Callable = _default_verify,
+                 approvals: Optional[List] = None,
+                 audit_sink: Optional[List] = None,
+                 now: Optional[datetime] = None) -> Tuple[int, Dict]:
+    """Grant a scoped, expiring live-ingest approval. Requires `revenue:approve`. Audited.
+    This is the ONLY way live ingestion becomes authorized; the ingest endpoint cannot self-approve."""
+    env = dict(env if env is not None else os.environ)
+    approvals = _DEFAULT_APPROVALS if approvals is None else approvals
+    audit_sink = _DEFAULT_AUDIT if audit_sink is None else audit_sink
+    secret = env.get("AUTH_SECRET", "")
+    now = now or datetime.now(timezone.utc)
+
+    token = bearer_from_header(headers.get("Authorization", ""))
+    try:
+        claims = verify(token, secret, REVENUE_APPROVE_PERMISSION)
+    except AuthFailure as e:
+        return e.code, {"error": e.message}
+
+    try:
+        data = json.loads(raw_body or b"{}")
+        if not isinstance(data, dict):
+            raise ValueError("body must be a JSON object")
+    except (json.JSONDecodeError, ValueError) as e:
+        return 400, {"error": f"invalid JSON body: {e}"}
+
+    provider = str(data.get("provider", "")).lower()
+    if provider not in RECOGNISED_PROVIDERS:
+        return 400, {"error": f"provider must be one of {list(RECOGNISED_PROVIDERS)}"}
+    if provider in DISABLED_PROVIDERS:
+        return 403, {"error": f"{provider} is disabled (CTO: Impact OFF) — cannot be approved"}
+    for field in ("window_start", "window_end", "expires_at"):
+        if not _looks_iso8601(str(data.get(field, ""))):
+            return 400, {"error": f"{field} must be ISO-8601"}
+
+    record = {
+        "id": "appr_" + hashlib.sha1(
+            f"{provider}:{data['window_start']}:{data['expires_at']}:{_now_iso()}".encode()
+        ).hexdigest()[:16],
+        "provider": provider,
+        "environment": str(data.get("environment") or _environment(env)),
+        "window_start": str(data["window_start"]),
+        "window_end": str(data["window_end"]),
+        "expires_at": str(data["expires_at"]),
+        "granted_by": (claims or {}).get("sub"),
+        "granted_at": _now_iso(),
+        "status": "active",
+    }
+    approvals.append(record)
+    audit_sink.append({"ts": _now_iso(), "event": "revenue_approval_grant",
+                       "actor": record["granted_by"], "target": provider,
+                       "meta": {"environment": record["environment"],
+                                "window": {"start": record["window_start"], "end": record["window_end"]},
+                                "expires_at": record["expires_at"], "approval_id": record["id"]}})
+    return 201, record
+
+
 def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
                   env: Optional[Mapping[str, str]] = None, *,
                   verify: Callable = _default_verify,
                   ingest: Callable = _default_ingest,
                   idem_store: Optional[Dict] = None,
-                  audit_sink: Optional[List] = None) -> Tuple[int, Dict]:
+                  audit_sink: Optional[List] = None,
+                  approvals: Optional[List] = None,
+                  rate_store: Optional[Dict] = None,
+                  clock: Callable[[], float] = _mono,
+                  now: Optional[datetime] = None) -> Tuple[int, Dict]:
     env = dict(env if env is not None else os.environ)
     idem_store = _DEFAULT_IDEM_STORE if idem_store is None else idem_store
     audit_sink = _DEFAULT_AUDIT if audit_sink is None else audit_sink
+    approvals = _DEFAULT_APPROVALS if approvals is None else approvals
+    rate_store = _DEFAULT_RATE if rate_store is None else rate_store
     secret = env.get("AUTH_SECRET", "")
+    now = now or datetime.now(timezone.utc)
+
+    # 0. Request size limit (cheap, before any work).
+    if raw_body is not None and len(raw_body) > MAX_BODY_BYTES:
+        return 413, {"error": f"request body exceeds {MAX_BODY_BYTES} bytes"}
 
     # 1. AuthN/AuthZ (reuse auth-rbac). Never echoes the token.
     token = bearer_from_header(headers.get("Authorization", ""))
@@ -121,7 +239,7 @@ def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
     except AuthFailure as e:
         return e.code, {"error": e.message}
 
-    # 2. Parse + validate body.
+    # 2. Parse + validate body (NO `approved` field — that is server-side now).
     try:
         data = json.loads(raw_body or b"{}")
         if not isinstance(data, dict):
@@ -134,7 +252,6 @@ def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
     window = data.get("window") or {}
     start = str(window.get("start", ""))
     end = str(window.get("end", ""))
-    approved = bool(data.get("approved", False))
 
     if provider not in RECOGNISED_PROVIDERS:
         return 400, {"error": f"provider must be one of {list(RECOGNISED_PROVIDERS)}"}
@@ -144,16 +261,27 @@ def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
         return 400, {"error": f"mode must be one of {list(VALID_MODES)}"}
     if not (_looks_iso8601(start) and _looks_iso8601(end)):
         return 400, {"error": "window.start and window.end must be ISO-8601"}
-    if mode == "live" and not approved:
-        return 424, {"error": "live ingestion requires approved=true (CTO authorization)"}
 
-    # 3. Idempotency (request-level). Row-level dedupe stays in the DB adapter.
+    # 3. Idempotency (request-level): same key + same body -> cached 200; different body -> 409.
     idem_key = headers.get("Idempotency-Key") or ""
+    body_hash = hashlib.sha256(raw_body or b"").hexdigest()
     if idem_key and idem_key in idem_store:
-        return 409, {"error": "duplicate Idempotency-Key", "idempotency_key": idem_key}
+        prior = idem_store[idem_key]
+        if prior.get("body_hash") == body_hash:
+            return 200, prior["response"]
+        return 409, {"error": "Idempotency-Key reused with a different body", "idempotency_key": idem_key}
 
-    # 4. Run. transport=None by construction -> run_ingestion() STOPs for live; dry-run otherwise.
-    result = ingest(provider, env, start, end, approved and mode == "live", None)
+    # 4. Per-token rate limit.
+    if _rate_limited((claims or {}).get("sub") or token, rate_store, clock):
+        return 429, {"error": "rate limit exceeded", "retry_after_s": RATE_WINDOW_S}
+
+    # 5. Server-side approval gate for live runs (replaces the old body `approved` flag).
+    live = mode == "live"
+    if live and not is_approved(provider, _environment(env), now, approvals):
+        return 424, {"error": "no active approval for live ingestion (grant via /affos/revenue/approve)"}
+
+    # 6. Run. transport=None by construction -> run_ingestion() STOPs; dry-run otherwise.
+    result = ingest(provider, env, start, end, live, None)
 
     response = {
         "status": "executed" if result.get("executed") else "stopped",
@@ -166,15 +294,14 @@ def handle_ingest(raw_body: bytes, headers: Mapping[str, str],
         "idempotency_key": idem_key or None,
     }
 
-    # 5. Audit (never logs secrets).
+    # 7. Audit (never logs secrets).
     audit_sink.append({
-        "ts": _now(), "event": "revenue_ingest", "actor": (claims or {}).get("sub"),
+        "ts": _now_iso(), "event": "revenue_ingest", "actor": (claims or {}).get("sub"),
         "target": provider, "meta": {"mode": mode, "window": {"start": start, "end": end},
-                                     "ingested": response["ingested"],
-                                     "status": response["status"]},
+                                     "ingested": response["ingested"], "status": response["status"]},
     })
     if idem_key:
-        idem_store[idem_key] = response
+        idem_store[idem_key] = {"body_hash": body_hash, "response": response}
     return 200, response
 
 
@@ -203,7 +330,6 @@ def handle_report(query: Mapping[str, str], headers: Mapping[str, str],
             "revenue": None, "real_commerce_proof": "NOT YET VERIFIED",
             "note": "dry-run: no live DB configured — reporting numbers unavailable",
         }
-    # LIVE branch (not exercised in S1–S4 tests; no DB here). Lazy import to avoid DB deps in dry-run.
     core = os.path.abspath(os.path.join(_HERE, "..", "core"))
     attr = os.path.join(core, "attribution")
     for p in (core, attr):
