@@ -1,0 +1,25 @@
+# AFFOS Revenue Runtime (PR #4 S1–S6) — staging/production image. Additive.
+# Serves AFFOS/runtime/server.py: /health, /affos/revenue/{ingest,approve,approve/revoke,report,reconcile}.
+# DRY-RUN by construction (no production transport); Impact OFF. No secret is baked into the image.
+FROM python:3.11-slim
+WORKDIR /app
+
+# Preserve the repo layout: revenue_api reuses apps/auth-rbac/src via ../../apps/auth-rbac/src,
+# so both trees must sit at /app/AFFOS and /app/apps/auth-rbac. Build context = repo root (compose: context: ..).
+COPY AFFOS /app/AFFOS
+COPY apps/auth-rbac /app/apps/auth-rbac
+
+# Postgres driver for the LIVE report/reconcile path (DATABASE_URL). The durable store + all tests use
+# stdlib SQLite, so no other runtime deps are required. JWT (jwt_util) and RBAC (matrix) are stdlib.
+RUN pip install --no-cache-dir 'psycopg[binary]>=3.1' \
+    && useradd -m -u 10004 omi && mkdir -p /data && chown -R omi /data /app
+USER omi
+
+ENV AFFOS_RUNTIME_PORT=8099 AFFOS_ENVIRONMENT=staging
+EXPOSE 8099
+
+# Secrets (AUTH_SECRET, DATABASE_URL, AFFOS_INGEST_DB, AFFOS_JWT_*) come from the compose env-file.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8099/health',timeout=5).status==200 else 1)"
+
+CMD ["python", "AFFOS/runtime/server.py"]
