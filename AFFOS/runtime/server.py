@@ -33,6 +33,10 @@ def build_output_response(env=None):
     return code, json.dumps(out, ensure_ascii=False).encode()
 
 
+def _json_bytes(payload) -> bytes:
+    return json.dumps(payload, ensure_ascii=False).encode()
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: bytes):
         self.send_response(code)
@@ -41,13 +45,35 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_body(self) -> bytes:
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n) if n else b""
+
     def do_GET(self):
-        if self.path in ("/health", "/", "/healthz"):
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        if parsed.path in ("/health", "/", "/healthz"):
             code, body = build_health_response()
             self._send(code, body)
-        elif self.path.startswith("/output/dry-run"):
+        elif parsed.path.startswith("/output/dry-run"):
             code, body = build_output_response()
             self._send(code, body)
+        elif parsed.path == "/affos/revenue/report":
+            import revenue_api
+            q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            code, payload = revenue_api.handle_report(q, self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
+        else:
+            self._send(404, b'{"error":"not found"}')
+
+    def do_POST(self):
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
+        if path == "/affos/revenue/ingest":
+            import revenue_api
+            body = self._read_body()
+            code, payload = revenue_api.handle_ingest(body, self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
         else:
             self._send(404, b'{"error":"not found"}')
 

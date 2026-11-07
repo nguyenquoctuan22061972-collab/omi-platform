@@ -1,0 +1,99 @@
+{
+  "name": "WF060 — AFFOS Affiliate Revenue Ingest (dry-run)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "hours", "hoursInterval": 1 } ] }
+      },
+      "name": "Schedule", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "assignments": { "assignments": [
+          { "id": "cfg-ingest", "name": "ingest_base", "value": "http://affos-runtime:8099", "type": "string" },
+          { "id": "cfg-auth", "name": "auth_base", "value": "http://auth-rbac:8081", "type": "string" },
+          { "id": "cfg-provider", "name": "provider", "value": "awin", "type": "string" },
+          { "id": "cfg-mode", "name": "mode", "value": "dry-run", "type": "string" },
+          { "id": "cfg-start", "name": "win_start", "value": "={{ $now.minus({ days: 1 }).toFormat('yyyy-LL-dd') }}", "type": "string" },
+          { "id": "cfg-end", "name": "win_end", "value": "={{ $now.toFormat('yyyy-LL-dd') }}", "type": "string" }
+        ] },
+        "includeOtherFields": true, "options": {}
+      },
+      "name": "Config", "type": "n8n-nodes-base.set", "typeVersion": 3.4, "position": [380, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.auth_base }}/auth/login",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ username: 'svc-revenue', password: '***set-in-n8n-credential***' }) }}",
+        "options": {}
+      },
+      "name": "Login (service acct)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [580, 300], "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 1500,
+      "credentials": { "httpHeaderAuth": { "id": "", "name": "AFFOS service account (đặt trong n8n)" } },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $('Config').item.json.ingest_base }}/affos/revenue/ingest",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "=Bearer {{ $json.access_token }}" },
+          { "name": "Idempotency-Key", "value": "={{ $('Config').item.json.provider }}:{{ $('Config').item.json.win_start }}:{{ $('Config').item.json.win_end }}" }
+        ] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ provider: $('Config').item.json.provider, mode: $('Config').item.json.mode, window: { start: $('Config').item.json.win_start, end: $('Config').item.json.win_end }, approved: false }) }}",
+        "options": {}
+      },
+      "name": "Ingest", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [780, 300], "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 2000,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').item.json.ingest_base }}/affos/revenue/report?provider={{ $('Config').item.json.provider }}&start={{ $('Config').item.json.win_start }}&end={{ $('Config').item.json.win_end }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "=Bearer {{ $('Login (service acct)').item.json.access_token }}" }
+        ] },
+        "options": {}
+      },
+      "name": "Verify / Report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [980, 300], "retryOnFail": true, "maxTries": 2, "waitBetweenTries": 1000,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Reconcile + alert gate (no secret). Flags when a run did not verify.\nconst ingest = $items('Ingest', 0, 0).length ? $('Ingest').item.json : {};\nconst report = $items('Verify / Report', 0, 0).length ? $('Verify / Report').item.json : {};\nconst proof = (report && report.real_commerce_proof) || (ingest && ingest.real_commerce_proof) || 'NOT YET VERIFIED';\nconst ok = proof === 'VERIFIED';\nreturn [{ json: { provider: $('Config').item.json.provider, window: { start: $('Config').item.json.win_start, end: $('Config').item.json.win_end }, status: ingest.status || 'unknown', ingested: ingest.ingested || 0, real_commerce_proof: proof, alert: ok ? null : 'revenue ingest NOT VERIFIED — review (dry-run until creds+approval)' } }];"
+      },
+      "name": "Reconcile", "type": "n8n-nodes-base.function", "typeVersion": 1,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true }, "combinator": "and", "conditions": [
+          { "leftValue": "={{ $json.alert }}", "rightValue": "", "operator": { "type": "string", "operation": "exists", "singleValue": true } }
+        ] }
+      },
+      "name": "If Alert", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1380, 300]
+    },
+    {
+      "parameters": { "content": "Failure alert sink — wire to Slack/email in n8n (disabled until configured).", "height": 80, "width": 260 },
+      "name": "Alert (configure in n8n)", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1,
+      "position": [1580, 220]
+    }
+  ],
+  "connections": {
+    "Schedule": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Login (service acct)", "type": "main", "index": 0 }]] },
+    "Login (service acct)": { "main": [[{ "node": "Ingest", "type": "main", "index": 0 }]] },
+    "Ingest": { "main": [[{ "node": "Verify / Report", "type": "main", "index": 0 }]] },
+    "Verify / Report": { "main": [[{ "node": "Reconcile", "type": "main", "index": 0 }]] },
+    "Reconcile": { "main": [[{ "node": "If Alert", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["WF060", "affos", "revenue", "ingest", "additive", "dry-run"]
+}
