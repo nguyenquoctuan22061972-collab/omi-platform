@@ -10,16 +10,20 @@ from typing import Dict, List, Set
 ROLES: List[str] = ["Admin", "Manager", "Operator", "Viewer"]
 
 # Quyền theo từng role.
+# revenue:read / revenue:ingest thêm additive cho AFFOS Revenue Ingestion API (S1).
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     "Viewer": {"contact:read"},
     "Operator": {"contact:read", "contact:write", "pipeline:write"},
-    "Manager": {"contact:read", "contact:write", "pipeline:write", "audit:read"},
+    "Manager": {"contact:read", "contact:write", "pipeline:write", "audit:read", "revenue:read"},
     "Admin": {
         "contact:read",
         "contact:write",
         "pipeline:write",
         "audit:read",
         "user:manage",
+        "revenue:read",
+        "revenue:ingest",
+        "revenue:approve",
     },
 }
 

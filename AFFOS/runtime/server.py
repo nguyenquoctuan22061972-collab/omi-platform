@@ -33,6 +33,33 @@ def build_output_response(env=None):
     return code, json.dumps(out, ensure_ascii=False).encode()
 
 
+def _json_bytes(payload) -> bytes:
+    return json.dumps(payload, ensure_ascii=False).encode()
+
+
+_STORE = None
+_STORE_BUILT = False
+
+
+def _get_store():
+    """Durable RevenueStore from AFFOS_INGEST_DB (sqlite path) if configured; else None (in-memory).
+    Lazily built once per process. Production would point this at Postgres via the 0004 migration."""
+    global _STORE, _STORE_BUILT
+    if _STORE_BUILT:
+        return _STORE
+    _STORE_BUILT = True
+    path = os.environ.get("AFFOS_INGEST_DB")
+    if path:
+        import sqlite3
+        import revenue_store
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        st = revenue_store.RevenueStore(conn, "?")
+        st.init_schema(with_commission_unique=False)   # ingest DB has no financial tables
+        _STORE = st
+    return _STORE
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: bytes):
         self.send_response(code)
@@ -41,13 +68,50 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_body(self) -> bytes:
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n) if n else b""
+
     def do_GET(self):
-        if self.path in ("/health", "/", "/healthz"):
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        if parsed.path in ("/health", "/", "/healthz"):
             code, body = build_health_response()
             self._send(code, body)
-        elif self.path.startswith("/output/dry-run"):
+        elif parsed.path.startswith("/output/dry-run"):
             code, body = build_output_response()
             self._send(code, body)
+        elif parsed.path == "/affos/revenue/report":
+            import revenue_api
+            q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            code, payload = revenue_api.handle_report(q, self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
+        elif parsed.path == "/affos/revenue/reconcile":
+            import revenue_api
+            q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            code, payload = revenue_api.handle_reconcile(q, self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
+        else:
+            self._send(404, b'{"error":"not found"}')
+
+    def do_POST(self):
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
+        if path == "/affos/revenue/ingest":
+            import revenue_api
+            code, payload = revenue_api.handle_ingest(self._read_body(), self.headers, os.environ,
+                                                      store=_get_store())
+            self._send(code, _json_bytes(payload))
+        elif path == "/affos/revenue/approve":
+            import revenue_api
+            code, payload = revenue_api.handle_grant(self._read_body(), self.headers, os.environ,
+                                                     store=_get_store())
+            self._send(code, _json_bytes(payload))
+        elif path == "/affos/revenue/approve/revoke":
+            import revenue_api
+            code, payload = revenue_api.handle_revoke(self._read_body(), self.headers, os.environ,
+                                                      store=_get_store())
+            self._send(code, _json_bytes(payload))
         else:
             self._send(404, b'{"error":"not found"}')
 
