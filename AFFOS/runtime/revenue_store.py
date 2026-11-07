@@ -15,9 +15,14 @@ Reuses the existing `audit_logs` table (no new audit engine). No secret is read 
 from __future__ import annotations
 
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
+
+# DB integrity-violation types (SQLite path tested; prod psycopg raises its own IntegrityError —
+# add it here when the Postgres store path is wired). Used for idempotent duplicate skipping.
+_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
 
 APPROVALS_DDL = """
 CREATE TABLE IF NOT EXISTS ingestion_approvals (
@@ -149,11 +154,14 @@ class RevenueStore:
         return cur.fetchone() is not None
 
     # ---- conversion chain write: ONE transaction, deterministic ids, row-level dedupe ----
-    def write_conversion_chain(self, action: Dict, data_state: str = "DRY_RUN") -> bool:
+    def write_conversion_chain(self, action: Dict, data_state: str = "DRY_RUN",
+                               on_duplicate: str = "raise") -> bool:
         """Write click -> conversion -> commission for one provider action in a SINGLE transaction.
         Ids are deterministic (CE-/CV-/CO-{source_record_id}); the unique(source, source_record_id)
-        index makes a duplicate action a no-op/raise rather than a duplicate commission. On any error
-        the whole chain rolls back (no partial write) — safe recovery is to replay the same action.
+        index makes a duplicate action raise (on_duplicate="raise", default) or be skipped
+        idempotently (on_duplicate="skip" -> returns False) rather than create a duplicate commission.
+        On any error the whole chain rolls back (no partial write) — safe recovery is to replay the
+        same action. Returns True on a write, False on an idempotent skip.
 
         NOTE: this is an additive helper that mirrors the reused AWIN/Impact engines' write shape;
         it does not replace them. Wiring the live engines to call it is a later sprint (dry-run writes
@@ -183,6 +191,11 @@ class RevenueStore:
                  src, srid, data_state, action.get("currency", "VND")))
             self.conn.commit()
             return True
+        except _INTEGRITY_ERRORS:
+            self.conn.rollback()                     # atomic: no partial chain
+            if on_duplicate == "skip":
+                return False
+            raise
         except Exception:
             self.conn.rollback()
             raise

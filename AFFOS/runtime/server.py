@@ -86,6 +86,11 @@ class Handler(BaseHTTPRequestHandler):
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             code, payload = revenue_api.handle_report(q, self.headers, os.environ)
             self._send(code, _json_bytes(payload))
+        elif parsed.path == "/affos/revenue/reconcile":
+            import revenue_api
+            q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            code, payload = revenue_api.handle_reconcile(q, self.headers, os.environ)
+            self._send(code, _json_bytes(payload))
         else:
             self._send(404, b'{"error":"not found"}')
 

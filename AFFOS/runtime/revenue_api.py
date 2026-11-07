@@ -390,3 +390,30 @@ def handle_report(query: Mapping[str, str], headers: Mapping[str, str],
     return 200, {"status": "ok", "repository_mode": "LIVE", "provider": provider or None,
                  "window": {"start": start, "end": end}, "totals": attribution.totals(repo),
                  "real_commerce_proof": proof.real_commerce_proof(repo)}
+
+
+def handle_reconcile(query: Mapping[str, str], headers: Mapping[str, str],
+                     env: Optional[Mapping[str, str]] = None, *,
+                     verify: Callable = _default_verify) -> Tuple[int, Dict]:
+    """Read-only reconciliation (S6). Requires `revenue:read`. DRY-RUN returns a stub (no DB);
+    LIVE runs revenue_report.reconcile against the repository. Never mutates source records."""
+    env = dict(env if env is not None else os.environ)
+    secret = env.get("AUTH_SECRET", "")
+    token = bearer_from_header(headers.get("Authorization", ""))
+    try:
+        verify(token, secret, REVENUE_READ_PERMISSION, env)
+    except AuthFailure as e:
+        return e.code, {"error": e.message}
+
+    if not (env.get("DATABASE_URL") or env.get("SUPABASE_DB_URL")):
+        return 200, {"status": "ok", "repository_mode": "DRY-RUN", "read_only": True,
+                     "note": "dry-run: no live DB configured — reconciliation unavailable",
+                     "alert": None}
+    if _HERE not in sys.path:
+        sys.path.insert(0, _HERE)
+    import runtime as _rt  # noqa: E402
+    import revenue_report  # noqa: E402
+    repo = _rt.build_repository(env)
+    report = revenue_report.reconcile(repo, currency=query.get("currency"))
+    report["repository_mode"] = "LIVE"
+    return 200, report
