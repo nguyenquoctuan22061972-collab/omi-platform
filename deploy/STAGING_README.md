@@ -12,9 +12,18 @@ up on the staging host after approval. DRY-RUN only; Impact OFF; no live affilia
 ```bash
 cp deploy/.env.staging.example deploy/.env.staging   # then fill AUTH_SECRET, AFFOS_PG_*, etc.
 docker compose -f deploy/docker-compose.staging.yml --env-file deploy/.env.staging up -d --build
-# Apply migration 0004 to the staging Postgres BEFORE the LIVE report/reconcile path (see the
-# apply-0004 runbook: backup → duplicate pre-check → apply → verify).
+# 1) Bootstrap roles ONCE (superuser), BEFORE migrations — creates the Supabase-compat roles that
+#    0002/0004 need on a vanilla Postgres, plus least-privilege affos_owner (DDL) / affos_service (DML):
+#      psql "$SUPERUSER_URL" -f deploy/postgres/roles.sql
+#      # then set role passwords out of band (see the bottom of roles.sql).
+# 2) Apply migrations as the OWNER role, in order 0001 → 0002 → 0003 → 0004 (see the apply-0004 runbook:
+#    backup → restore test → duplicate pre-check → apply → verify).
 ```
+
+## Backup / restore
+- Backup before migration: `pg_dump "$OWNER_URL" --format=custom -f affos_pre<ts>.dump` (store off-box).
+- Restore TEST (prove the snapshot loads before applying 0004), into a fresh/scratch DB:
+  `deploy/scripts/pg_restore.sh affos_pre<ts>.dump "<scratch-db-url>"` (no --clean; refuses prod-looking targets).
 
 ## Validate (per STAGING_PREP runbook)
 `/health` 200 · dry-run `ingest` → `stopped`/NOT YET VERIFIED · `impact` → 403 · restart + idempotency
