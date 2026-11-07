@@ -13,6 +13,7 @@
         "assignments": { "assignments": [
           { "id": "cfg-ingest", "name": "ingest_base", "value": "http://affos-runtime:8099", "type": "string" },
           { "id": "cfg-auth", "name": "auth_base", "value": "http://auth-rbac:8081", "type": "string" },
+          { "id": "cfg-user", "name": "svc_user", "value": "svc-revenue", "type": "string" },
           { "id": "cfg-provider", "name": "provider", "value": "awin", "type": "string" },
           { "id": "cfg-mode", "name": "mode", "value": "dry-run", "type": "string" },
           { "id": "cfg-start", "name": "win_start", "value": "={{ $now.minus({ days: 1 }).toFormat('yyyy-LL-dd') }}", "type": "string" },
@@ -26,12 +27,11 @@
       "parameters": {
         "method": "POST", "url": "={{ $('Config').item.json.auth_base }}/auth/login",
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ username: 'svc-revenue', password: '***set-in-n8n-credential***' }) }}",
+        "jsonBody": "={{ JSON.stringify({ username: $('Config').item.json.svc_user, password: $vars.AFFOS_SVC_PASSWORD }) }}",
         "options": {}
       },
       "name": "Login (service acct)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
       "position": [580, 300], "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 1500,
-      "credentials": { "httpHeaderAuth": { "id": "", "name": "AFFOS service account (đặt trong n8n)" } },
       "disabled": true
     },
     {
@@ -43,7 +43,7 @@
           { "name": "Idempotency-Key", "value": "={{ $('Config').item.json.provider }}:{{ $('Config').item.json.win_start }}:{{ $('Config').item.json.win_end }}" }
         ] },
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ provider: $('Config').item.json.provider, mode: $('Config').item.json.mode, window: { start: $('Config').item.json.win_start, end: $('Config').item.json.win_end }, approved: false }) }}",
+        "jsonBody": "={{ JSON.stringify({ provider: $('Config').item.json.provider, mode: $('Config').item.json.mode, window: { start: $('Config').item.json.win_start, end: $('Config').item.json.win_end } }) }}",
         "options": {}
       },
       "name": "Ingest", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
