@@ -13,9 +13,12 @@ from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "runtime"))
+sys.path.insert(0, os.path.join(ROOT, "core"))
 sys.path.insert(0, os.path.join(ROOT, "..", "apps", "auth-rbac", "src"))
 
 import revenue_api  # noqa: E402
+import revenue_store  # noqa: E402
+from data_access import Repo  # noqa: E402
 from auth import jwt_util  # noqa: E402
 
 SECRET = "test-secret"
@@ -149,6 +152,78 @@ class TestRevenueApprove(unittest.TestCase):
                            "window_end": (NOW + timedelta(hours=1)).isoformat(),
                            "expires_at": (NOW + timedelta(hours=1)).isoformat()}).encode()
         self.assertEqual(self._grant({"Authorization": _tok(["Admin"])}, body)[0], 403)
+
+
+class TestJWTHardening(unittest.TestCase):
+    ENV2 = {"AUTH_SECRET": SECRET, "AFFOS_ENVIRONMENT": "production",
+            "AFFOS_JWT_ISS": "affos-auth", "AFFOS_JWT_AUD": "revenue"}
+
+    def _tok(self, **extra):
+        payload = {"sub": "svc-1", "roles": ["Admin"]}
+        payload.update(extra)
+        return "Bearer " + jwt_util.encode(payload, SECRET)
+
+    def _ingest(self, hdr):
+        return revenue_api.handle_ingest(_body(), hdr, self.ENV2, idem_store={}, audit_sink=[],
+                                         approvals=[], rate_store={}, clock=lambda: 1.0, now=NOW)
+
+    def test_valid_issuer_audience_ok(self):
+        code, _ = self._ingest({"Authorization": self._tok(iss="affos-auth", aud="revenue")})
+        self.assertEqual(code, 200)
+
+    def test_invalid_issuer_401(self):
+        code, r = self._ingest({"Authorization": self._tok(iss="evil", aud="revenue")})
+        self.assertEqual(code, 401)
+        self.assertIn("issuer", r["error"])
+
+    def test_invalid_audience_401(self):
+        code, r = self._ingest({"Authorization": self._tok(iss="affos-auth", aud="other")})
+        self.assertEqual(code, 401)
+        self.assertIn("audience", r["error"])
+
+
+class TestStoreBacked(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo(data_state="DRY_RUN")
+        self.store = revenue_store.RevenueStore(self.repo.conn, "?")
+        self.store.init_schema(with_commission_unique=False)
+        self.rate = {}
+
+    def _ingest(self, body, hdr):
+        return revenue_api.handle_ingest(body, hdr, ENV, store=self.store, rate_store=self.rate,
+                                         clock=lambda: 1.0, now=NOW)
+
+    def _grant(self):
+        body = json.dumps({"provider": "awin", "environment": "production",
+                           "window_start": (NOW - timedelta(hours=1)).isoformat(),
+                           "window_end": (NOW + timedelta(hours=1)).isoformat(),
+                           "expires_at": (NOW + timedelta(hours=1)).isoformat()}).encode()
+        return revenue_api.handle_grant(body, {"Authorization": _tok(["Admin"])}, ENV, store=self.store)
+
+    def test_live_requires_store_approval(self):
+        code, _ = self._ingest(_body(mode="live"), {"Authorization": _tok(["Admin"])})
+        self.assertEqual(code, 424)
+        self.assertEqual(self._grant()[0], 201)
+        code2, _ = self._ingest(_body(mode="live"), {"Authorization": _tok(["Admin"])})
+        self.assertEqual(code2, 200)                 # approval now active in the durable store
+
+    def test_revoke_blocks_live(self):
+        code, rec = self._grant()
+        self.assertEqual(self._ingest(_body(mode="live"), {"Authorization": _tok(["Admin"])})[0], 200)
+        rv = revenue_api.handle_revoke(json.dumps({"approval_id": rec["id"]}).encode(),
+                                       {"Authorization": _tok(["Admin"])}, ENV, store=self.store)
+        self.assertEqual(rv[0], 200)
+        self.assertEqual(self._ingest(_body(mode="live"), {"Authorization": _tok(["Admin"])})[0], 424)
+
+    def test_durable_idempotency(self):
+        hdr = {"Authorization": _tok(["Admin"]), "Idempotency-Key": "dk1"}
+        c1, r1 = self._ingest(_body(), hdr)
+        c2, r2 = self._ingest(_body(), hdr)
+        self.assertEqual((c1, c2), (200, 200))
+        self.assertEqual(r1, r2)                     # replay from the durable store
+        c3, _ = self._ingest(_body(window={"start": "2026-11-01", "end": "2026-11-02"}),
+                             {"Authorization": _tok(["Admin"]), "Idempotency-Key": "dk1"})
+        self.assertEqual(c3, 409)
 
 
 class TestRevenueReport(unittest.TestCase):

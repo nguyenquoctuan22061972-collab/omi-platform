@@ -32,6 +32,9 @@ jobs:
         working-directory: workflows
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — AFFOS Revenue Ingestion API + durable store (S2–S5A)
+        run: python -m unittest AFFOS.tests.test_revenue_api AFFOS.tests.test_revenue_store -v
+
       - name: Test — Frontend Dashboard (PRD-004)
         working-directory: apps/dashboard
         run: python -m unittest discover -s tests -p 'test_*.py' -v
