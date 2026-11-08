@@ -160,10 +160,13 @@ class CostLedger:
 
     # ---- read ----
     def _raw(self, events: Tuple[str, ...]) -> List[Tuple[str, Dict]]:
-        """(event, parsed-meta) for the given events (SQLite TEXT -> json.loads; PG jsonb -> already dict)."""
+        """(event, parsed-meta) for the given events, oldest->newest. ORDER BY ts makes 'latest wins'
+        deterministic for duplicate cost.confirm rows (ISO-8601 UTC text sorts chronologically; PG
+        timestamptz sorts natively). (SQLite TEXT -> json.loads; PG jsonb -> already dict.)"""
         marks = ",".join(["?"] * len(events))
         cur = self.conn.cursor()
-        cur.execute(self._q(f"SELECT event, meta FROM audit_logs WHERE event IN ({marks})"), tuple(events))
+        cur.execute(self._q(f"SELECT event, meta FROM audit_logs WHERE event IN ({marks}) ORDER BY ts"),
+                    tuple(events))
         out: List[Tuple[str, Dict]] = []
         for row in cur.fetchall():
             ev = row[0] if not isinstance(row, dict) else row["event"]
@@ -176,9 +179,12 @@ class CostLedger:
         """Terminal (success/failed) beats pending; higher attempt wins ties."""
         return (1 if r.get("status") in _TERMINAL else 0, int(r.get("attempt") or 1))
 
-    def _dedup_rows(self) -> List[Dict]:
-        """Authoritative read-time dedup. Collapse cost.call rows that share a call_id to the terminal
-        attempt; rows without a call_id (legacy) pass through. Apply cost.confirm overrides by call_id."""
+    def _read(self) -> Tuple[List[Dict], List[Dict]]:
+        """Return (deduped cost rows, orphan confirmations). Rows are read ORDER BY ts, so for duplicate
+        cost.confirm rows on one call_id the LATEST by ts wins (deterministic). Collapse cost.call rows
+        that share a call_id to the terminal attempt; rows without a call_id (legacy) pass through; apply
+        cost.confirm overrides by call_id. An orphan confirm (a call_id with no cost.call row) is NOT
+        applied to any cost and is returned separately so it is surfaced, not silently dropped."""
         by_call: Dict[str, Dict] = {}
         passthrough: List[Dict] = []
         confirms: Dict[str, float] = {}
@@ -187,7 +193,7 @@ class CostLedger:
                 cid = m.get("call_id")
                 cb = m.get("confirmed_billed_usd")
                 if cid is not None and cb is not None:
-                    confirms[cid] = float(cb)   # last confirmation wins
+                    confirms[cid] = float(cb)   # rows are ts-ordered -> latest confirmation wins
                 continue
             cid = m.get("call_id")
             if cid is None:
@@ -197,6 +203,7 @@ class CostLedger:
             if prev is None or self._rank(m) >= self._rank(prev):
                 by_call[cid] = m
         rows: List[Dict] = passthrough + list(by_call.values())
+        present = {r.get("call_id") for r in rows if r.get("call_id") is not None}
         out: List[Dict] = []
         for m in rows:
             cid = m.get("call_id")
@@ -205,7 +212,13 @@ class CostLedger:
                 m["confirmed_billed_usd"] = confirms[cid]
                 m["cost_state"] = "CONFIRMED_BILLED"
             out.append(m)
-        return out
+        orphans = [{"call_id": cid, "confirmed_billed_usd": confirms[cid]}
+                   for cid in confirms if cid not in present]
+        return out, orphans
+
+    def _dedup_rows(self) -> List[Dict]:
+        """Deduped cost rows only (orphan confirms dropped — see _read / summary.orphan_confirms)."""
+        return self._read()[0]
 
     @staticmethod
     def _agg(rows: List[Dict]) -> Dict:
@@ -239,12 +252,19 @@ class CostLedger:
         return {"job_id": job_id, **self._agg(rows)}
 
     def summary(self) -> Dict:
-        """Totals plus per-video and per-workflow roll-ups — the Phase-0 baseline report shape."""
-        rows = self._dedup_rows()
+        """Totals plus per-video and per-workflow roll-ups — the Phase-0 baseline report shape.
+        orphan_confirms surfaces cost.confirm rows whose call_id has no matching cost.call (so a billed
+        amount that cannot be attributed is visible, not silently lost)."""
+        rows, orphans = self._read()
         videos = sorted({r.get("video_id") for r in rows if r.get("video_id") is not None})
         jobs = sorted({r.get("job_id") for r in rows if r.get("job_id") is not None})
         return {
             "totals": self._agg(rows),
             "per_video": {v: self._agg([r for r in rows if r.get("video_id") == v]) for v in videos},
             "per_workflow": {j: self._agg([r for r in rows if r.get("job_id") == j]) for j in jobs},
+            "orphan_confirms": {
+                "count": len(orphans),
+                "usd": round(sum(o["confirmed_billed_usd"] for o in orphans), 6),
+                "call_ids": [o["call_id"] for o in orphans],
+            },
         }

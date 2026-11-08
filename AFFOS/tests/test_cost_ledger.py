@@ -150,6 +150,31 @@ class TestCode1IdempotencyAndConfirm(unittest.TestCase):
         self.assertAlmostEqual(cpv["estimated_only_usd"], 0.05, places=6)
         self.assertAlmostEqual(cpv["pct_confirmed"], round(0.08 / 0.13, 4), places=4)
 
+    def test_latest_confirm_wins_by_ts(self):
+        conn, led = _fresh()
+        led.record_call(step="voice", video_id="V1", call_id="B1", estimated_usd=0.10)
+        # two confirmations for B1 with explicit ts; the LATEST ts (0.08) must win, not the older (0.20)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO audit_logs (id,event,actor,target,meta,ts) VALUES (?,?,?,?,?,?)",
+                    ("c_old", "cost.confirm", None, "B1",
+                     json.dumps({"call_id": "B1", "confirmed_billed_usd": 0.20}), "2026-01-01T00:00:00+00:00"))
+        cur.execute("INSERT INTO audit_logs (id,event,actor,target,meta,ts) VALUES (?,?,?,?,?,?)",
+                    ("c_new", "cost.confirm", None, "B1",
+                     json.dumps({"call_id": "B1", "confirmed_billed_usd": 0.08}), "2026-02-01T00:00:00+00:00"))
+        conn.commit()
+        self.assertAlmostEqual(led.cost_per_video("V1")["usd"], 0.08, places=6)   # deterministic latest-by-ts
+
+    def test_orphan_confirm_surfaced_not_counted(self):
+        _, led = _fresh()
+        led.record_call(step="voice", video_id="V1", call_id="B1", estimated_usd=0.10)
+        led.confirm_cost("B1", 0.08)        # matched
+        led.confirm_cost("GHOST", 0.50)     # orphan: no cost.call with call_id GHOST
+        s = led.summary()
+        self.assertEqual(s["orphan_confirms"]["count"], 1)
+        self.assertIn("GHOST", s["orphan_confirms"]["call_ids"])
+        self.assertAlmostEqual(s["orphan_confirms"]["usd"], 0.50, places=6)
+        self.assertAlmostEqual(s["per_video"]["V1"]["usd"], 0.08, places=6)        # orphan NOT added to cost
+
     def test_confirm_row_is_insert_only_separate_event(self):
         conn, led = _fresh()
         led.record_call(step="voice", video_id="V1", call_id="B9", estimated_usd=0.10)
