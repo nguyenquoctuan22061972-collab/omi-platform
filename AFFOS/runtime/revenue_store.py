@@ -20,9 +20,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
-# DB integrity-violation types (SQLite path tested; prod psycopg raises its own IntegrityError —
-# add it here when the Postgres store path is wired). Used for idempotent duplicate skipping.
-_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+# DB integrity-violation types used for idempotent duplicate skipping / atomic rollback. SQLite is
+# always present; psycopg (v3) is added when installed (the production/staging Postgres store path, now
+# wired in server.py) so a UniqueViolation on real Postgres takes the SAME rollback+skip/raise branch
+# in write_conversion_chain as SQLite — instead of falling through as a generic error, which would make
+# on_duplicate="skip" raise on Postgres. Importing psycopg is OPTIONAL: the SQLite test/CI path must not
+# require it, so a missing psycopg leaves the SQLite-only tuple unchanged.
+_INTEGRITY_ERRORS: tuple = (sqlite3.IntegrityError,)
+try:  # pragma: no cover - the psycopg branch runs only where psycopg is installed (PG path)
+    import psycopg as _psycopg
+
+    _INTEGRITY_ERRORS = (sqlite3.IntegrityError, _psycopg.IntegrityError)
+except Exception:  # psycopg not installed (SQLite-only / CI env) — SQLite path is unaffected
+    pass
 
 APPROVALS_DDL = """
 CREATE TABLE IF NOT EXISTS ingestion_approvals (

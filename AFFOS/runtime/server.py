@@ -41,22 +41,40 @@ _STORE = None
 _STORE_BUILT = False
 
 
+class StoreUnavailable(RuntimeError):
+    """A Postgres store was configured (DATABASE_URL/SUPABASE_DB_URL) but could not be initialized.
+
+    Raised — never cached — so the runtime does NOT silently downgrade to SQLite/in-memory when a DB
+    was configured (a must in staging), and so a later request retries once the DB is reachable again.
+    """
+
+
 def _get_store():
-    """Durable RevenueStore, built once per process. Preference:
+    """Durable RevenueStore, built once per process ON SUCCESS. Preference:
       1. Postgres (DATABASE_URL/SUPABASE_DB_URL) — approvals/idempotency/audit live in the 0004/0005
-         tables; schema is owned by the migration, so the runtime role does NO DDL here.
+         tables; schema is owned by the migration, so the runtime role does NO DDL here. If the DB is
+         configured but UNREACHABLE, raise StoreUnavailable (do NOT cache the failure, do NOT fall back
+         to SQLite/in-memory) — the request fails loudly and a later one retries after recovery.
       2. SQLite (AFFOS_INGEST_DB) — durable on a volume for dev/dry-run without a DB.
-      3. None — in-memory fallback (pure dry-run)."""
+      3. None — in-memory fallback (pure dry-run), only when no store is configured at all.
+
+    _STORE_BUILT is set True only after a store is successfully built (or no DB is configured), so a
+    transient Postgres outage is never cached as a permanent None."""
     global _STORE, _STORE_BUILT
     if _STORE_BUILT:
         return _STORE
-    _STORE_BUILT = True
     import revenue_store
     url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
     if url:
         import psycopg
-        conn = psycopg.connect(url)                     # tables come from migration (no init_schema)
+        try:
+            conn = psycopg.connect(url)                 # tables come from migration (no init_schema)
+        except Exception as exc:                        # DB configured but down: fail loud, don't cache
+            raise StoreUnavailable(
+                "DATABASE_URL is configured but the Postgres store is unavailable; refusing to "
+                "downgrade to SQLite/in-memory") from exc
         _STORE = revenue_store.RevenueStore(conn, "%s")
+        _STORE_BUILT = True                             # mark built ONLY after a successful connect
         return _STORE
     path = os.environ.get("AFFOS_INGEST_DB")
     if path:
@@ -66,6 +84,7 @@ def _get_store():
         st = revenue_store.RevenueStore(conn, "?")
         st.init_schema(with_commission_unique=False)   # SQLite dev store: create its own tables
         _STORE = st
+    _STORE_BUILT = True                                 # no DB configured: cache the stable result
     return _STORE
 
 
@@ -80,6 +99,15 @@ class Handler(BaseHTTPRequestHandler):
     def _read_body(self) -> bytes:
         n = int(self.headers.get("Content-Length") or 0)
         return self.rfile.read(n) if n else b""
+
+    def _resolve_store(self):
+        """Return (store, True), or send a 503 and return (None, False) when a configured DB is down.
+        store may legitimately be None (in-memory dry-run) with ok=True when no DB is configured."""
+        try:
+            return _get_store(), True
+        except StoreUnavailable as exc:
+            self._send(503, _json_bytes({"error": "store unavailable", "detail": str(exc)}))
+            return None, False
 
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
@@ -107,19 +135,28 @@ class Handler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse
         path = urlparse(self.path).path
         if path == "/affos/revenue/ingest":
+            store, ok = self._resolve_store()
+            if not ok:
+                return
             import revenue_api
             code, payload = revenue_api.handle_ingest(self._read_body(), self.headers, os.environ,
-                                                      store=_get_store())
+                                                      store=store)
             self._send(code, _json_bytes(payload))
         elif path == "/affos/revenue/approve":
+            store, ok = self._resolve_store()
+            if not ok:
+                return
             import revenue_api
             code, payload = revenue_api.handle_grant(self._read_body(), self.headers, os.environ,
-                                                     store=_get_store())
+                                                     store=store)
             self._send(code, _json_bytes(payload))
         elif path == "/affos/revenue/approve/revoke":
+            store, ok = self._resolve_store()
+            if not ok:
+                return
             import revenue_api
             code, payload = revenue_api.handle_revoke(self._read_body(), self.headers, os.environ,
-                                                      store=_get_store())
+                                                      store=store)
             self._send(code, _json_bytes(payload))
         else:
             self._send(404, b'{"error":"not found"}')

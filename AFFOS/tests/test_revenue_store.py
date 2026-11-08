@@ -121,6 +121,16 @@ class TestChainWriteDedupeAndAtomicity(unittest.TestCase):
             st.write_conversion_chain(self._action("T1"))           # same action -> raises, no dup
         self.assertEqual(repo.count("commissions"), 1)
 
+    def test_duplicate_on_skip_is_idempotent_no_raise(self):
+        repo, st = _fresh_store()
+        self.assertTrue(st.write_conversion_chain(self._action("T2"), on_duplicate="skip"))
+        # same action with on_duplicate="skip" -> returns False, no exception, still exactly one row.
+        self.assertFalse(st.write_conversion_chain(self._action("T2"), on_duplicate="skip"))
+        self.assertEqual(repo.count("commissions"), 1)
+        # the integrity-error tuple must carry sqlite3's error so the skip branch is reachable at all;
+        # the Postgres path adds psycopg.IntegrityError (proven in the real-PG integration run).
+        self.assertIn(sqlite3.IntegrityError, revenue_store._INTEGRITY_ERRORS)
+
     def test_partial_failure_rolls_back_whole_chain(self):
         repo, st = _fresh_store()
         # Pre-seed a commission occupying (source=awin, source_record_id=X) under a DIFFERENT id,
