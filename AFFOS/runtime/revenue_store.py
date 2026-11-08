@@ -20,9 +20,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
-# DB integrity-violation types (SQLite path tested; prod psycopg raises its own IntegrityError —
-# add it here when the Postgres store path is wired). Used for idempotent duplicate skipping.
-_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+# DB integrity-violation types used for idempotent duplicate skipping / atomic rollback. SQLite is
+# always present; psycopg (v3) is added when installed (the production/staging Postgres store path, now
+# wired in server.py) so a UniqueViolation on real Postgres takes the SAME rollback+skip/raise branch
+# in write_conversion_chain as SQLite — instead of falling through as a generic error, which would make
+# on_duplicate="skip" raise on Postgres. Importing psycopg is OPTIONAL: the SQLite test/CI path must not
+# require it, so a missing psycopg leaves the SQLite-only tuple unchanged.
+_INTEGRITY_ERRORS: tuple = (sqlite3.IntegrityError,)
+try:  # pragma: no cover - the psycopg branch runs only where psycopg is installed (PG path)
+    import psycopg as _psycopg
+
+    _INTEGRITY_ERRORS = (sqlite3.IntegrityError, _psycopg.IntegrityError)
+except Exception:  # psycopg not installed (SQLite-only / CI env) — SQLite path is unaffected
+    pass
 
 APPROVALS_DDL = """
 CREATE TABLE IF NOT EXISTS ingestion_approvals (
@@ -73,6 +83,9 @@ class RevenueStore:
     def __init__(self, conn, placeholder: str = "?"):
         self.conn = conn
         self.ph = placeholder
+        # On Postgres the idempotency.response column is jsonb; a json string param needs an explicit
+        # ::jsonb cast, and reads come back already-parsed. SQLite stores/returns plain TEXT.
+        self._jsonb = "::jsonb" if placeholder == "%s" else ""
 
     # ---- schema (SQLite/dry-run convenience; prod uses the 0004 migration) ----
     def init_schema(self, with_commission_unique: bool = True) -> None:
@@ -113,11 +126,13 @@ class RevenueStore:
             return "conflict", None
         if resp is None:
             return "pending", None                 # reserved but not completed — do NOT cache null
-        return "replay", json.loads(resp)
+        # SQLite returns TEXT (str); Postgres jsonb returns an already-parsed dict/list.
+        return "replay", (resp if isinstance(resp, (dict, list)) else json.loads(resp))
 
     def commit_response(self, idem_key: str, response: Dict) -> None:
         cur = self.conn.cursor()
-        cur.execute(self._q("UPDATE ingestion_idempotency SET response = ? WHERE idem_key = ?"),
+        cur.execute(self._q("UPDATE ingestion_idempotency SET response = ?" + self._jsonb
+                            + " WHERE idem_key = ?"),
                     (json.dumps(response, ensure_ascii=False), idem_key))
         self.conn.commit()
 
