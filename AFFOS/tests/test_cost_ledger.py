@@ -249,6 +249,18 @@ class TestG2StalePending(unittest.TestCase):
         self.assertEqual(s["per_video"]["V1"]["usd_unpriced_calls"], 1)            # flagged, not 0-cost
         self.assertEqual(s["per_video"]["V1"]["usd_priced_calls"], 0)
 
+    def test_legacy_without_status_not_pending(self):
+        conn, led = _fresh()
+        # legacy pre-CODE-1 row: meta has usd but NO status / call_id
+        conn.cursor().execute(
+            "INSERT INTO audit_logs (id,event,actor,target,meta,ts) VALUES (?,?,?,?,?,?)",
+            ("leg1", "cost.call", None, "V1",
+             json.dumps({"video_id": "V1", "usd": 0.10}), "2026-01-01T00:00:00+00:00"))
+        conn.commit()
+        s = led.summary()
+        self.assertEqual(s["pending"]["count"], 0)                       # legacy (no status) NOT pending
+        self.assertAlmostEqual(s["per_video"]["V1"]["usd"], 0.10, places=6)  # still aggregates (back-compat)
+
     def test_summary_is_read_only_no_write(self):
         conn, led = _fresh()
         led.record_call(step="s", video_id="V1", call_id="P1", status="pending")
