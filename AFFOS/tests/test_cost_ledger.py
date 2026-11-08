@@ -86,5 +86,80 @@ class TestWriteAndRollup(unittest.TestCase):
         self.assertEqual(s["per_workflow"]["J1"]["calls"], 2)
 
 
+class TestCode1IdempotencyAndConfirm(unittest.TestCase):
+    """CODE-1: call_id/run_id/idempotency_key, attempt/status, read-time dedup, estimated vs billed."""
+
+    def _meta(self, conn, call_id):
+        cur = conn.cursor()
+        cur.execute("SELECT meta FROM audit_logs WHERE event='cost.call'")
+        for (meta,) in cur.fetchall():
+            m = json.loads(meta)
+            if m.get("call_id") == call_id:
+                return m
+        return None
+
+    def test_ids_and_default_idempotency_key(self):
+        conn, led = _fresh()
+        cid = led.record_call(step="script", run_id="r1", video_id="V1", usd=0.1)
+        m = self._meta(conn, cid)
+        self.assertEqual(m["run_id"], "r1")
+        self.assertEqual(m["idempotency_key"], "r1:script:V1")   # default formula
+        self.assertEqual(m["attempt"], 1)
+        self.assertEqual(m["status"], "success")
+        self.assertEqual(m["call_id"], cid)                       # returns the call_id
+
+    def test_pending_then_terminal_same_call_id_counted_once(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="C1", status="pending")      # no cost yet
+        led.record_call(step="s", video_id="V1", call_id="C1", status="success", usd=0.20, attempt=1)
+        cpv = led.cost_per_video("V1")
+        self.assertEqual(cpv["calls"], 1)                         # pending+terminal collapse to one
+        self.assertAlmostEqual(cpv["usd"], 0.20, places=6)        # terminal row's cost
+
+    def test_duplicate_call_id_deduped_at_read(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="C9", status="success", usd=0.30)
+        led.record_call(step="s", video_id="V1", call_id="C9", status="success", usd=0.30)  # double-log
+        cpv = led.cost_per_video("V1")
+        self.assertEqual(cpv["calls"], 1)                         # counted once
+        self.assertAlmostEqual(cpv["usd"], 0.30, places=6)        # not double-counted
+
+    def test_skip_if_logged_best_effort(self):
+        conn, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="C2", usd=0.10)
+        led.record_call(step="s", video_id="V1", call_id="C2", usd=0.10, skip_if_logged=True)
+        cur = conn.cursor(); cur.execute("SELECT COUNT(*) FROM audit_logs WHERE event='cost.call'")
+        self.assertEqual(cur.fetchone()[0], 1)                    # second insert skipped
+
+    def test_retry_new_call_id_counts_as_new_cost(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="A1", idempotency_key="k", status="failed", usd=0.05, attempt=1)
+        led.record_call(step="s", video_id="V1", call_id="A2", idempotency_key="k", status="success", usd=0.07, attempt=2)
+        cpv = led.cost_per_video("V1")
+        self.assertEqual(cpv["calls"], 2)                         # distinct physical attempts
+        self.assertAlmostEqual(cpv["usd"], 0.12, places=6)        # both real costs counted
+
+    def test_confirm_overrides_estimate_and_split_reported(self):
+        _, led = _fresh()
+        led.record_call(step="voice", video_id="V1", call_id="B1", estimated_usd=0.10)   # estimate
+        led.confirm_cost("B1", 0.08)                                                       # billed cheaper
+        led.record_call(step="thumb", video_id="V1", call_id="B2", estimated_usd=0.05)   # estimate-only
+        cpv = led.cost_per_video("V1")
+        self.assertAlmostEqual(cpv["usd"], 0.13, places=6)        # 0.08 confirmed + 0.05 estimated
+        self.assertAlmostEqual(cpv["confirmed_usd"], 0.08, places=6)
+        self.assertAlmostEqual(cpv["estimated_only_usd"], 0.05, places=6)
+        self.assertAlmostEqual(cpv["pct_confirmed"], round(0.08 / 0.13, 4), places=4)
+
+    def test_confirm_row_is_insert_only_separate_event(self):
+        conn, led = _fresh()
+        led.record_call(step="voice", video_id="V1", call_id="B9", estimated_usd=0.10)
+        led.confirm_cost("B9", 0.09)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM audit_logs WHERE event='cost.confirm'")
+        self.assertEqual(cur.fetchone()[0], 1)                    # confirmation is a separate appended row
+        cur.execute("SELECT COUNT(*) FROM audit_logs WHERE event='cost.call'")
+        self.assertEqual(cur.fetchone()[0], 1)                    # original call row untouched (no UPDATE)
+
+
 if __name__ == "__main__":
     unittest.main()
