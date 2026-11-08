@@ -67,6 +67,20 @@ def _effective(r: Dict) -> Optional[float]:
     return float(cb) if cb is not None else _estimated(r)
 
 
+def _parse_ts(ts) -> Optional[datetime]:
+    """audit_logs.ts as an aware datetime. PG returns a datetime; SQLite returns an ISO-8601 string.
+    A naive value is assumed UTC. Unparseable -> None (age simply unknown, never fabricated)."""
+    if ts is None:
+        return None
+    dt = ts if isinstance(ts, datetime) else None
+    if dt is None:
+        try:
+            dt = datetime.fromisoformat(str(ts))
+        except (ValueError, TypeError):
+            return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class CostLedger:
     """Append-only cost/token ledger over the existing `audit_logs` table.
 
@@ -103,7 +117,7 @@ class CostLedger:
     def _has_call(self, call_id: str) -> bool:
         """Best-effort write-side dedup probe (Option A): is this call_id already logged? Race-prone by
         design (see module docstring); read-time dedup is the authoritative guard."""
-        return any(m.get("call_id") == call_id for _, m in self._raw((COST_EVENT,)))
+        return any(m.get("call_id") == call_id for _ev, m, _ts in self._raw((COST_EVENT,)))
 
     # ---- write ----
     def record_call(self, *, step: str, model: Optional[str] = None, provider: Optional[str] = None,
@@ -159,19 +173,21 @@ class CostLedger:
         return self._append(CONFIRM_EVENT, call_id, meta)
 
     # ---- read ----
-    def _raw(self, events: Tuple[str, ...]) -> List[Tuple[str, Dict]]:
-        """(event, parsed-meta) for the given events, oldest->newest. ORDER BY ts makes 'latest wins'
-        deterministic for duplicate cost.confirm rows (ISO-8601 UTC text sorts chronologically; PG
-        timestamptz sorts natively). (SQLite TEXT -> json.loads; PG jsonb -> already dict.)"""
+    def _raw(self, events: Tuple[str, ...]) -> List[Tuple[str, Dict, object]]:
+        """(event, parsed-meta, ts) for the given events, oldest->newest. ORDER BY ts, id makes 'latest
+        wins' deterministic for duplicate cost.confirm rows AND stable on an exact-ts tie (id is the PK,
+        a repeatable secondary sort). ISO-8601 UTC text sorts chronologically; PG timestamptz sorts
+        natively. (SQLite TEXT -> json.loads; PG jsonb -> already dict.)"""
         marks = ",".join(["?"] * len(events))
         cur = self.conn.cursor()
-        cur.execute(self._q(f"SELECT event, meta FROM audit_logs WHERE event IN ({marks}) ORDER BY ts"),
+        cur.execute(self._q(f"SELECT event, meta, ts FROM audit_logs WHERE event IN ({marks}) ORDER BY ts, id"),
                     tuple(events))
-        out: List[Tuple[str, Dict]] = []
+        out: List[Tuple[str, Dict, object]] = []
         for row in cur.fetchall():
             ev = row[0] if not isinstance(row, dict) else row["event"]
             meta = row[1] if not isinstance(row, dict) else row["meta"]
-            out.append((ev, meta if isinstance(meta, dict) else json.loads(meta)))
+            ts = row[2] if not isinstance(row, dict) else row["ts"]
+            out.append((ev, meta if isinstance(meta, dict) else json.loads(meta), ts))
         return out
 
     @staticmethod
@@ -188,13 +204,14 @@ class CostLedger:
         by_call: Dict[str, Dict] = {}
         passthrough: List[Dict] = []
         confirms: Dict[str, float] = {}
-        for ev, m in self._raw((COST_EVENT, CONFIRM_EVENT)):
+        for ev, m, ts in self._raw((COST_EVENT, CONFIRM_EVENT)):
             if ev == CONFIRM_EVENT:
                 cid = m.get("call_id")
                 cb = m.get("confirmed_billed_usd")
                 if cid is not None and cb is not None:
-                    confirms[cid] = float(cb)   # rows are ts-ordered -> latest confirmation wins
+                    confirms[cid] = float(cb)   # rows are (ts,id)-ordered -> latest confirmation wins
                 continue
+            m["_ts"] = ts                       # ephemeral: the audit_logs.ts, for pending-age (not persisted)
             cid = m.get("call_id")
             if cid is None:
                 passthrough.append(m)
@@ -251,13 +268,24 @@ class CostLedger:
         rows = [r for r in self._dedup_rows() if r.get("job_id") == job_id]
         return {"job_id": job_id, **self._agg(rows)}
 
-    def summary(self) -> Dict:
+    def summary(self, now: Optional[datetime] = None, stale_after_seconds: int = 86400) -> Dict:
         """Totals plus per-video and per-workflow roll-ups — the Phase-0 baseline report shape.
-        orphan_confirms surfaces cost.confirm rows whose call_id has no matching cost.call (so a billed
-        amount that cannot be attributed is visible, not silently lost)."""
+
+        orphan_confirms surfaces cost.confirm rows whose call_id has no matching cost.call (a billed
+        amount that cannot be attributed — visible, not silently lost).
+
+        pending surfaces cost.call rows still in status 'pending' (no terminal success/failed arrived),
+        with age and a configurable stale threshold. This is READ-ONLY diagnostics: it never writes, never
+        marks a stale call as failed, and never assumes a missing cost is 0 (unpriced pending stay unpriced)."""
         rows, orphans = self._read()
         videos = sorted({r.get("video_id") for r in rows if r.get("video_id") is not None})
         jobs = sorted({r.get("job_id") for r in rows if r.get("job_id") is not None})
+        now = now or datetime.now(timezone.utc)
+
+        pending = [r for r in rows if r.get("status") == "pending"]   # terminal rows already won in _read
+        ages = {id(r): (now - _parse_ts(r.get("_ts"))).total_seconds()
+                for r in pending if _parse_ts(r.get("_ts")) is not None}
+        stale = [r for r in pending if ages.get(id(r), 0.0) >= stale_after_seconds]
         return {
             "totals": self._agg(rows),
             "per_video": {v: self._agg([r for r in rows if r.get("video_id") == v]) for v in videos},
@@ -266,5 +294,13 @@ class CostLedger:
                 "count": len(orphans),
                 "usd": round(sum(o["confirmed_billed_usd"] for o in orphans), 6),
                 "call_ids": [o["call_id"] for o in orphans],
+            },
+            "pending": {
+                "count": len(pending),
+                "stale_count": len(stale),
+                "stale_after_seconds": stale_after_seconds,
+                "oldest_age_seconds": round(max(ages.values()), 3) if ages else 0.0,
+                "stale_call_ids": [r.get("call_id") for r in stale],
+                "unpriced_count": sum(1 for r in pending if _effective(r) is None),  # cost NOT assumed 0
             },
         }

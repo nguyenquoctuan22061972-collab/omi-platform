@@ -9,6 +9,7 @@ import os
 import sqlite3
 import sys
 import unittest
+from datetime import datetime, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "runtime"))
@@ -184,6 +185,77 @@ class TestCode1IdempotencyAndConfirm(unittest.TestCase):
         self.assertEqual(cur.fetchone()[0], 1)                    # confirmation is a separate appended row
         cur.execute("SELECT COUNT(*) FROM audit_logs WHERE event='cost.call'")
         self.assertEqual(cur.fetchone()[0], 1)                    # original call row untouched (no UPDATE)
+
+
+class TestG1EqualTsTiebreak(unittest.TestCase):
+    """G1: ORDER BY ts, id — stable, deterministic winner even when confirmation timestamps are equal."""
+
+    def _confirm_row(self, conn, rid, call_id, usd, ts):
+        conn.cursor().execute(
+            "INSERT INTO audit_logs (id,event,actor,target,meta,ts) VALUES (?,?,?,?,?,?)",
+            (rid, "cost.confirm", None, call_id,
+             json.dumps({"call_id": call_id, "confirmed_billed_usd": usd}), ts))
+        conn.commit()
+
+    def test_equal_ts_tiebreak_is_stable_and_deterministic(self):
+        conn, led = _fresh()
+        led.record_call(step="voice", video_id="V1", call_id="B1", estimated_usd=0.10)
+        TS = "2026-01-01T00:00:00+00:00"                 # identical timestamps
+        self._confirm_row(conn, "id_a", "B1", 0.20, TS)  # id_a < id_b lexically
+        self._confirm_row(conn, "id_b", "B1", 0.08, TS)
+        r1 = led.cost_per_video("V1")["usd"]
+        r2 = led.cost_per_video("V1")["usd"]
+        self.assertEqual(r1, r2)                          # stable across reads
+        self.assertAlmostEqual(r1, 0.08, places=6)        # ORDER BY ts,id -> id_b last -> 0.08 wins
+
+
+class TestG2StalePending(unittest.TestCase):
+    """G2: read-only stale-pending diagnostics in summary() — count, age, configurable threshold."""
+
+    def _pending_row(self, conn, rid, call_id, ts, estimated=None):
+        meta = {"call_id": call_id, "status": "pending", "video_id": "V1", "estimated_usd": estimated,
+                "usd": estimated}
+        conn.cursor().execute(
+            "INSERT INTO audit_logs (id,event,actor,target,meta,ts) VALUES (?,?,?,?,?,?)",
+            (rid, "cost.call", None, "V1", json.dumps(meta), ts))
+        conn.commit()
+
+    def test_pending_without_terminal_surfaced(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="P1", status="pending", estimated_usd=0.05)
+        self.assertEqual(led.summary()["pending"]["count"], 1)
+
+    def test_pending_resolved_by_terminal_not_counted(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="P1", status="pending")
+        led.record_call(step="s", video_id="V1", call_id="P1", status="success", estimated_usd=0.05)
+        self.assertEqual(led.summary()["pending"]["count"], 0)
+
+    def test_stale_threshold_configurable(self):
+        conn, led = _fresh()
+        self._pending_row(conn, "p_old", "P1", "2026-01-01T00:00:00+00:00")
+        now = datetime(2026, 1, 2, tzinfo=timezone.utc)                  # 1 day (86400s) later
+        self.assertEqual(led.summary(now=now, stale_after_seconds=3600)["pending"]["stale_count"], 1)
+        self.assertEqual(led.summary(now=now, stale_after_seconds=10 * 86400)["pending"]["stale_count"], 0)
+        s = led.summary(now=now, stale_after_seconds=3600)
+        self.assertAlmostEqual(s["pending"]["oldest_age_seconds"], 86400.0, places=0)
+        self.assertIn("P1", s["pending"]["stale_call_ids"])
+
+    def test_pending_unpriced_cost_not_assumed_zero(self):
+        _, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="P1", status="pending")   # no estimate
+        s = led.summary()
+        self.assertEqual(s["pending"]["unpriced_count"], 1)
+        self.assertEqual(s["per_video"]["V1"]["usd_unpriced_calls"], 1)            # flagged, not 0-cost
+        self.assertEqual(s["per_video"]["V1"]["usd_priced_calls"], 0)
+
+    def test_summary_is_read_only_no_write(self):
+        conn, led = _fresh()
+        led.record_call(step="s", video_id="V1", call_id="P1", status="pending")
+        cur = conn.cursor(); cur.execute("SELECT COUNT(*) FROM audit_logs"); before = cur.fetchone()[0]
+        led.summary(stale_after_seconds=1)                 # even flagging stale must not write/mark failed
+        cur.execute("SELECT COUNT(*) FROM audit_logs"); after = cur.fetchone()[0]
+        self.assertEqual(before, after)
 
 
 if __name__ == "__main__":
