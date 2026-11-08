@@ -1,0 +1,79 @@
+# OMI Platform — STAGING compose (PROPOSAL for AFFOS Revenue PR #4 validation).
+# Additive; does NOT replace docker-compose.prod.yml. Brings up a staging Postgres + auth-rbac +
+# affos-runtime so the S1–S6 revenue API can be validated per deploy/STAGING_README.md.
+# Usage (after approval, on staging host):
+#   docker compose -f deploy/docker-compose.staging.yml --env-file deploy/.env.staging up -d --build
+# DRY-RUN: no live affiliate call is possible; Impact is OFF. Apply migration 0004 to `postgres`
+# (see the apply-0004 runbook) BEFORE exercising the LIVE report/reconcile path.
+name: omi-platform-staging
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # Bootstrap SUPERUSER — used ONLY to run deploy/postgres/roles.sql once. The runtime does NOT
+      # use this account (it connects as affos_service; migrations run as affos_owner).
+      POSTGRES_DB: ${AFFOS_PG_DB:?set AFFOS_PG_DB in .env.staging}
+      POSTGRES_USER: ${AFFOS_PG_SUPERUSER:?set AFFOS_PG_SUPERUSER in .env.staging}
+      POSTGRES_PASSWORD: ${AFFOS_PG_SUPERUSER_PASSWORD:?set AFFOS_PG_SUPERUSER_PASSWORD in .env.staging}
+    volumes:
+      - ./staging-data/pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [omi-staging]
+
+  auth-rbac:
+    build: { context: .., dockerfile: deploy/Dockerfile.auth-rbac }
+    restart: unless-stopped
+    environment:
+      AUTH_DB_PATH: /data/auth_rbac.db
+      AUTH_PORT: "8081"
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.staging}
+      # Stamp iss/aud on issued tokens (must match the affos-runtime AFFOS_JWT_* below).
+      AUTH_JWT_ISS: ${AFFOS_JWT_ISS:?set AFFOS_JWT_ISS in .env.staging}
+      AUTH_JWT_AUD: ${AFFOS_JWT_AUD:?set AFFOS_JWT_AUD in .env.staging}
+    volumes:
+      - ./staging-data/auth:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8081/auth/me',timeout=5).status in (200,401) else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [omi-staging]
+
+  affos-runtime:
+    build: { context: .., dockerfile: deploy/Dockerfile.affos-runtime }
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      auth-rbac: { condition: service_started }
+    environment:
+      AFFOS_RUNTIME_PORT: "8099"
+      AFFOS_ENVIRONMENT: staging
+      # JWT verify shares the same signing secret as auth-rbac.
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.staging}
+      # REQUIRED in staging: issuer/audience are enforced (must match auth-rbac AUTH_JWT_*).
+      AFFOS_JWT_ISS: ${AFFOS_JWT_ISS:?set AFFOS_JWT_ISS in .env.staging}
+      AFFOS_JWT_AUD: ${AFFOS_JWT_AUD:?set AFFOS_JWT_AUD in .env.staging}
+      # Runtime connects as the LEAST-PRIVILEGE affos_service role (DML on the operational store only;
+      # SELECT elsewhere; NO DDL, NO BYPASSRLS). This is also the durable approvals/idempotency/audit
+      # store (0004/0005 tables) — NOT SQLite. Migrations run separately as affos_owner.
+      DATABASE_URL: postgresql://affos_service:${AFFOS_PG_SERVICE_PASSWORD}@postgres:5432/${AFFOS_PG_DB}
+    volumes:
+      - ./staging-data/affos:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8099/health',timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [omi-staging]
+
+networks:
+  # To let n8n (a separate deployment) reach affos-runtime:8099 for WF060, attach n8n to this network
+  # or make it external and share it. Kept internal here so staging stands up on its own.
+  omi-staging:
+    driver: bridge

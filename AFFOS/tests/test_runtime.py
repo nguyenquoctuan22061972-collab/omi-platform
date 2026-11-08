@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import types
 import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -66,6 +67,85 @@ class TestAwinIngestGate(unittest.TestCase):
                                       transport=Transport())   # is_production=False
         self.assertFalse(r["executed"])
         self.assertEqual(r["real_commerce_proof"], "NOT YET VERIFIED")
+
+
+class TestGetStoreInitRetry(unittest.TestCase):
+    """server._get_store must NOT cache a failed Postgres init, and must NOT silently downgrade to
+    SQLite/in-memory when a DB is configured. Uses a fake `psycopg` module so it runs with no real DB
+    (the equivalent against a real Postgres 16 is in the integration run)."""
+
+    def setUp(self):
+        self._saved = (server._STORE, server._STORE_BUILT)
+        server._STORE, server._STORE_BUILT = None, False
+        self._psycopg_saved = sys.modules.get("psycopg")
+        self._env_saved = {k: os.environ.get(k) for k in ("DATABASE_URL", "SUPABASE_DB_URL", "AFFOS_INGEST_DB")}
+        for k in self._env_saved:
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        server._STORE, server._STORE_BUILT = self._saved
+        if self._psycopg_saved is not None:
+            sys.modules["psycopg"] = self._psycopg_saved
+        else:
+            sys.modules.pop("psycopg", None)
+        for k, v in self._env_saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _install_fake_psycopg(self, connect):
+        mod = types.ModuleType("psycopg")
+        mod.connect = connect
+
+        class _IntegrityError(Exception):
+            pass
+
+        mod.IntegrityError = _IntegrityError
+        sys.modules["psycopg"] = mod
+
+    def test_db_unavailable_raises_not_cached_then_recovers(self):
+        os.environ["DATABASE_URL"] = "postgresql://unreachable/db"
+        calls = {"n": 0}
+
+        def flaky_connect(url):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("connection refused")   # DB down on the first attempt
+            return object()                           # DB recovered
+
+        self._install_fake_psycopg(flaky_connect)
+        # 1) DB down -> StoreUnavailable, and the failure is NOT cached as a permanent None.
+        with self.assertRaises(server.StoreUnavailable):
+            server._get_store()
+        self.assertFalse(server._STORE_BUILT)
+        self.assertIsNone(server._STORE)
+        # 2) DB recovered -> the NEXT request initializes the store successfully (retry works).
+        st = server._get_store()
+        self.assertIsNotNone(st)
+        self.assertTrue(server._STORE_BUILT)
+        self.assertEqual(calls["n"], 2)               # it re-attempted connect after the failure
+        # 3) Built once: a later call returns the same store without reconnecting.
+        self.assertIs(server._get_store(), st)
+        self.assertEqual(calls["n"], 2)
+
+    def test_configured_db_down_does_not_downgrade_to_sqlite(self):
+        os.environ["DATABASE_URL"] = "postgresql://unreachable/db"
+        os.environ["AFFOS_INGEST_DB"] = ":memory:"     # present, but must NOT be used while a DB is set
+
+        def always_down(url):
+            raise OSError("connection refused")
+
+        self._install_fake_psycopg(always_down)
+        with self.assertRaises(server.StoreUnavailable):
+            server._get_store()
+        self.assertFalse(server._STORE_BUILT)
+        self.assertIsNone(server._STORE)               # no silent SQLite/in-memory fallback
+
+    def test_no_db_configured_uses_in_memory_and_caches(self):
+        # No DATABASE_URL and no AFFOS_INGEST_DB -> in-memory (None) store, cached as the stable result.
+        self.assertIsNone(server._get_store())
+        self.assertTrue(server._STORE_BUILT)
 
 
 if __name__ == "__main__":
