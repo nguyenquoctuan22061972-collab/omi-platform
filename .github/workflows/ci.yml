@@ -36,7 +36,8 @@ jobs:
         run: >-
           python -m unittest
           AFFOS.tests.test_revenue_api AFFOS.tests.test_revenue_store
-          AFFOS.tests.test_awin_dryrun AFFOS.tests.test_revenue_report -v
+          AFFOS.tests.test_awin_dryrun AFFOS.tests.test_revenue_report
+          AFFOS.tests.test_cost_ledger -v
 
       - name: Test — Frontend Dashboard (PRD-004)
         working-directory: apps/dashboard
