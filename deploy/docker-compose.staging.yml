@@ -65,6 +65,9 @@ services:
       DATABASE_URL: postgresql://affos_service:${AFFOS_PG_SERVICE_PASSWORD}@postgres:5432/${AFFOS_PG_DB}
     volumes:
       - ./staging-data/affos:/data
+    # Container healthcheck = LIVENESS (/health): process up, no DB touch — a transient Postgres blip must
+    # NOT restart-loop the app. For READINESS (does Postgres answer right now?) probe GET /ready (200 up /
+    # 503 down) from an external LB/orchestrator; it is DB-aware and does not gate container restarts.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8099/health',timeout=5).status==200 else 1)"]
       interval: 30s

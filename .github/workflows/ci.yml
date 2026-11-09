@@ -39,7 +39,13 @@ jobs:
           AFFOS.tests.test_awin_dryrun AFFOS.tests.test_revenue_report
           AFFOS.tests.test_runtime AFFOS.tests.test_cost_ledger
           AFFOS.tests.test_pilot_metering AFFOS.tests.test_baseline_runner
-          AFFOS.tests.test_provider_runner -v
+          AFFOS.tests.test_provider_runner AFFOS.tests.test_runtime_reliability
+          AFFOS.tests.test_cost_guards AFFOS.tests.test_security -v
+
+      - name: Security config check (static, no DB)
+        run: |
+          python -c "import yaml" 2>/dev/null || pip install pyyaml
+          python deploy/staging/verify_security.py
 
       - name: Test — Frontend Dashboard (PRD-004)
         working-directory: apps/dashboard
