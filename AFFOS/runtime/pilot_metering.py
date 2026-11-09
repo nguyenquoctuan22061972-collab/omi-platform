@@ -7,7 +7,9 @@ The content pipeline (apps/content-factory/pipeline/pipeline.py) runs each stage
      other's committed cost). A would-be over-ceiling stage is REFUSED: it logs an UNPRICED `failed`
      marker (a refusal is before the provider call, so it costs nothing) and raises CeilingExceeded,
   3. logs a `pending` cost.call, then calls `real_runner(stage)` — the ONLY place a real paid call could
-     occur — then logs the terminal `success` cost.call,
+     occur — then logs the terminal `success` cost.call. If `real_runner` RAISES, it instead logs a terminal
+     `failed` cost.call (same call_id; estimate kept — a paid attempt may already have billed) and re-raises,
+     so a crashed attempt is classified as failed (not left dangling 'pending') and no false success occurs,
   4. returns the artifact.
 
 Concern-1 fix (retry / no missing cost): each PHYSICAL invocation of a stage gets a DISTINCT call_id
@@ -87,7 +89,16 @@ def metered_runner(ledger, *, run_id: str, video_id: str, job_id: Optional[str] 
             _log(stage, call_id, attempt, None, conn, "failed")   # unpriced marker: a refusal costs nothing
             raise CeilingExceeded(f"{scope} ceiling {cap} would be exceeded at stage '{stage}' (est {est})")
         _log(stage, call_id, attempt, est, conn, "pending")       # visible before the (possibly paid) call
-        artifact = real_runner(stage)                             # <-- ONLY place a real paid call could occur
+        try:
+            artifact = real_runner(stage)                         # <-- ONLY place a real paid call could occur
+        except Exception:
+            # The attempt reached the provider call and then failed. Record a TERMINAL 'failed' row for THIS
+            # call_id (dedup keeps it over the 'pending') so a crashed attempt is classified as failed, not
+            # left dangling as 'pending' (which would pollute stale-pending diagnostics forever). Keep the
+            # estimate (a paid attempt may already have billed — cost is surfaced, never fabricated), then
+            # re-raise so the caller sees the failure and no false success is produced.
+            _log(stage, call_id, attempt, est, conn, "failed")
+            raise
         _log(stage, call_id, attempt, est, conn, "success")       # terminal (same call_id -> dedup keeps this)
         return artifact
 

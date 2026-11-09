@@ -39,7 +39,8 @@ jobs:
           AFFOS.tests.test_awin_dryrun AFFOS.tests.test_revenue_report
           AFFOS.tests.test_runtime AFFOS.tests.test_cost_ledger
           AFFOS.tests.test_pilot_metering AFFOS.tests.test_baseline_runner
-          AFFOS.tests.test_provider_runner AFFOS.tests.test_provider_adapters -v
+          AFFOS.tests.test_provider_runner AFFOS.tests.test_provider_adapters
+          AFFOS.tests.test_fullchain_integration -v
 
       - name: Test — Frontend Dashboard (PRD-004)
         working-directory: apps/dashboard
