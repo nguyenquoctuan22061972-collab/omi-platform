@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -40,6 +41,9 @@ def _json_bytes(payload) -> bytes:
 
 _STORE = None
 _STORE_BUILT = False
+# Serializes store build/reconnect: under ThreadingHTTPServer, N concurrent requests that all detect a
+# dead connection must cause exactly ONE reconnect, never a connection storm. Double-checked below.
+_STORE_LOCK = threading.Lock()
 
 
 class StoreUnavailable(RuntimeError):
@@ -108,29 +112,37 @@ def _get_store(probe: bool = False):
 
     probe=True (used by the request path and the /ready readiness probe): if a previously-built Postgres
     store's connection has DIED mid-process, drop it and reconnect — still never downgrading to SQLite
-    while a DB is configured. Default probe=False keeps the fast hot path (build-once, return cached)."""
+    while a DB is configured. Default probe=False keeps the fast hot path (build-once, return cached).
+
+    Build/reconnect runs under _STORE_LOCK with a double-check, so concurrent requests that all observe a
+    dead connection serialize into ONE reconnect (no connection storm)."""
     global _STORE, _STORE_BUILT
     url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
-    if _STORE_BUILT and probe and url and _STORE is not None and not _store_alive(_STORE):
-        _STORE, _STORE_BUILT = None, False              # dead PG connection -> drop and rebuild below
-    if _STORE_BUILT:
+    # Fast path (no lock): a built, healthy store (or any built store when not probing) returns at once.
+    if _STORE_BUILT and not (probe and url and _STORE is not None and not _store_alive(_STORE)):
         return _STORE
-    import revenue_store
-    if url:
-        conn = _connect_pg(url)                         # retries per env; raises StoreUnavailable on exhaustion
-        _STORE = revenue_store.RevenueStore(conn, "%s")
-        _STORE_BUILT = True                             # mark built ONLY after a successful connect
+    with _STORE_LOCK:
+        # Re-check inside the lock: another thread may have just built or reconnected the store.
+        if _STORE_BUILT and probe and url and _STORE is not None and not _store_alive(_STORE):
+            _STORE, _STORE_BUILT = None, False          # dead PG connection -> drop and rebuild below
+        if _STORE_BUILT:
+            return _STORE
+        import revenue_store
+        if url:
+            conn = _connect_pg(url)                     # retries per env; raises StoreUnavailable on exhaustion
+            _STORE = revenue_store.RevenueStore(conn, "%s")
+            _STORE_BUILT = True                         # mark built ONLY after a successful connect
+            return _STORE
+        path = os.environ.get("AFFOS_INGEST_DB")
+        if path:
+            import sqlite3
+            conn = sqlite3.connect(path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            st = revenue_store.RevenueStore(conn, "?")
+            st.init_schema(with_commission_unique=False)  # SQLite dev store: create its own tables
+            _STORE = st
+        _STORE_BUILT = True                             # no DB configured: cache the stable result
         return _STORE
-    path = os.environ.get("AFFOS_INGEST_DB")
-    if path:
-        import sqlite3
-        conn = sqlite3.connect(path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        st = revenue_store.RevenueStore(conn, "?")
-        st.init_schema(with_commission_unique=False)   # SQLite dev store: create its own tables
-        _STORE = st
-    _STORE_BUILT = True                                 # no DB configured: cache the stable result
-    return _STORE
 
 
 def build_ready_response(env=None):

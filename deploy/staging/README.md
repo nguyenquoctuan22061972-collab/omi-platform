@@ -26,6 +26,20 @@ Checks: `/health` liveness 200 · `/ready` readiness 200 (DB up) · unauthentica
 `iss`/`aud` enforced). Plus operator-driven negatives with Postgres stopped: `/ready` → **503**, authed
 ingest → **503** (no false success, no SQLite downgrade), then reconnect on restart.
 
+## 2b. Static security check — `verify_security.py` (no DB; CI-safe)
+```bash
+python3 deploy/staging/verify_security.py   # 10 checks: no public PG port, runtime=affos_service,
+                                            # no n8n DB creds, roles.sql least-privilege, no committed secret
+```
+
+## 2c. Scratch-PG rehearsals (self-contained; build + destroy their own PostgreSQL 16)
+```bash
+deploy/staging/backup_restore_rehearsal.sh   # dump → checksum → restore → verify (no data loss). 13 gates.
+deploy/staging/migration_safety_rehearsal.sh # order/idempotency/duplicate-precheck/unique-index. 8 gates.
+```
+> Run end-to-end on a disposable scratch PostgreSQL 16 (**backup/restore 13/13, migration 8/8 PASS**).
+> They NEVER connect to staging/production and clean up after themselves.
+
 ## 3. Network / volume / isolation (host-level, operator checks)
 - `docker compose -f deploy/docker-compose.staging.yml ps` → Postgres has **no published host port** (internal
   `omi-staging` bridge only). `.env.staging` is gitignored; secrets come from the secret store.

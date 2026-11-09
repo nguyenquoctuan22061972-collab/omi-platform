@@ -13,6 +13,7 @@ import importlib.machinery
 import json
 import os
 import sys
+import threading
 import types
 import unittest
 
@@ -202,6 +203,81 @@ class TestLivenessVsReadiness(_ReliabilityBase):
         conns[0].broken = True                                    # connection dies mid-life
         self.assertEqual(server.build_ready_response()[0], 200)   # readiness reconnects -> still 200
         self.assertEqual(len(conns), 2)                           # proof it rebuilt, not served dead
+
+
+class TestConcurrencyNoReconnectStorm(_ReliabilityBase):
+    def test_many_threads_detect_outage_cause_one_reconnect(self):
+        os.environ["DATABASE_URL"] = "postgresql://host/db"
+        lock = threading.Lock()
+        conns = []
+
+        def connect(url):
+            with lock:
+                c = _FakeConn()
+                conns.append(c)
+                return c
+
+        self._install_fake_psycopg(connect)
+        server._get_store()                               # initial build -> conn #1
+        self.assertEqual(len(conns), 1)
+        conns[0].broken = True                            # the live connection dies
+
+        n = 16
+        barrier = threading.Barrier(n)
+        got = []
+
+        def worker():
+            barrier.wait()                                # maximize contention on the dead connection
+            got.append(server._get_store(probe=True))
+
+        threads = [threading.Thread(target=worker) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(conns), 2)                   # exactly ONE reconnect, not a storm
+        self.assertTrue(all(s is got[0] for s in got))    # every thread sees the same rebuilt store
+        self.assertIs(got[0].conn, conns[1])
+        self.assertFalse(got[0].conn.broken)
+
+
+class TestTimeoutHandling(_ReliabilityBase):
+    def test_connect_timeout_is_retried_then_raises(self):
+        os.environ["DATABASE_URL"] = "postgresql://host/db?connect_timeout=1"
+        os.environ["AFFOS_DB_CONNECT_ATTEMPTS"] = "3"
+        n = {"c": 0}
+
+        def times_out(url):
+            n["c"] += 1
+            raise TimeoutError("connect timed out")       # DB not responding at connect
+
+        self._install_fake_psycopg(times_out)
+        with self.assertRaises(server.StoreUnavailable):  # a timeout is a connect failure -> StoreUnavailable
+            server._get_store()
+        self.assertEqual(n["c"], 3)                       # retried the configured number of times
+        self.assertFalse(server._STORE_BUILT)
+
+
+class TestRetryIsConnectScoped(_ReliabilityBase):
+    def test_retry_does_not_fire_on_a_successful_connect(self):
+        # Retry/backoff is scoped to establishing the CONNECTION, never a blanket write retry (so it can
+        # never re-issue a non-idempotent write). A connect that succeeds first-try is called exactly once
+        # even with attempts=3, and the store's write path is reached without any retry wrapper.
+        os.environ["DATABASE_URL"] = "postgresql://host/db"
+        os.environ["AFFOS_DB_CONNECT_ATTEMPTS"] = "3"
+        n = {"c": 0}
+
+        def connect(url):
+            n["c"] += 1
+            return _FakeConn()
+
+        self._install_fake_psycopg(connect)
+        st = server._get_store()
+        self.assertEqual(n["c"], 1)                        # no extra connects on success
+        # a write goes straight through (no retry loop around the store operation)
+        st.conn.cursor().execute("INSERT INTO audit_logs DEFAULT VALUES")
+        self.assertEqual(n["c"], 1)                        # unchanged — writes are not retried by the runtime
 
 
 if __name__ == "__main__":
