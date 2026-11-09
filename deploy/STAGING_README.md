@@ -34,9 +34,22 @@ superuser runs `roles.sql` once. n8n never gets a DB credential.
 `/health` 200 · dry-run `ingest` → `stopped`/NOT YET VERIFIED · `impact` → 403 · restart + idempotency
 (200 cached / 409 diff / 409 pending) · approval + revoke + RBAC + audit · WF060 dry-run (n8n).
 
-## Notes / deferred
-- The durable approvals/idempotency store uses `AFFOS_INGEST_DB` (SQLite on a volume). A Postgres-backed
-  store (using the 0004 tables) is a separate code task.
+## Runtime store, health & readiness (current)
+- The durable approvals/idempotency/audit store is **Postgres** (0004/0005 tables) via `DATABASE_URL`
+  as the least-privilege `affos_service` role — implemented in `AFFOS/runtime/server.py` (`_get_store`).
+  When `DATABASE_URL` is configured but unreachable the runtime raises `StoreUnavailable` → HTTP **503**
+  and **never** silently downgrades to SQLite/in-memory. (`AFFOS_INGEST_DB` SQLite is used ONLY when no
+  `DATABASE_URL` is set — dev/dry-run.)
+- **Connect retry (opt-in):** `AFFOS_DB_CONNECT_ATTEMPTS` (default 1) and `AFFOS_DB_CONNECT_BACKOFF_MS`
+  (default 0) ride out a transient outage at connect time; on exhaustion → `StoreUnavailable` (no fallback).
+- **Mid-life reconnect:** a Postgres connection that dies during the process is transparently rebuilt on
+  the next DB-backed request / readiness probe (never served dead).
+- **Liveness vs readiness:**
+  - `GET /health` (and `/`, `/healthz`) = **liveness** — process up, secret-free, **does NOT touch the DB**
+    (so a transient DB blip does not restart-loop the container). This is the compose healthcheck.
+  - `GET /ready` (and `/readyz`) = **readiness** — **probes Postgres**; **200** when reachable (or no DB
+    configured = dry-run), **503** when a configured Postgres is unreachable. Use this for an external
+    load-balancer / orchestrator readiness gate so writes stop routing during an outage.
 - n8n is a separate deployment; attach it to the `omi-staging` network (or make the network external)
   so WF060 can reach `affos-runtime:8099`.
 - Image build was not verified in CI here (no Docker daemon in the authoring session); `docker compose
