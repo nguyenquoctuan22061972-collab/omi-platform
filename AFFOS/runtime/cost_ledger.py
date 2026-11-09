@@ -268,6 +268,19 @@ class CostLedger:
         rows = [r for r in self._dedup_rows() if r.get("job_id") == job_id]
         return {"job_id": job_id, **self._agg(rows)}
 
+    def cost_by_provider(self) -> Dict[str, float]:
+        """Effective cost (confirmed-where-known else estimated) grouped by meta.provider, from the
+        deduped rows. Durable, read-only — lets a connector-scoped spend ceiling be enforced from the
+        ledger rather than an in-process tally (so concurrent runs see each other's committed cost)."""
+        out: Dict[str, float] = {}
+        for r in self._dedup_rows():
+            v = _effective(r)
+            if v is None:
+                continue
+            p = r.get("provider")
+            out[p] = round(out.get(p, 0.0) + v, 6)
+        return out
+
     def summary(self, now: Optional[datetime] = None, stale_after_seconds: int = 86400) -> Dict:
         """Totals plus per-video and per-workflow roll-ups — the Phase-0 baseline report shape.
 
