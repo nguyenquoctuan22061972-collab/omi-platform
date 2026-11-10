@@ -15,10 +15,14 @@ NON_REAL_STATES = {"TEST", "DRY_RUN", "SEEDED"}   # tuyệt đối không gắn 
 
 # Phân loại event (bắt buộc phân biệt seeded vs production).
 CLICK_TYPES = {"AFFOS_TRACKED_CLICK", "NETWORK_REPORTED_CLICK", "SEEDED_CLICK"}
-CONVERSION_TYPES = {"AWIN_PRODUCTION_CONVERSION", "SEEDED_CONVERSION"}
+CONVERSION_TYPES = {"AWIN_PRODUCTION_CONVERSION", "IMPACT_PRODUCTION_CONVERSION", "SEEDED_CONVERSION"}
 REVENUE_LABELS = {"PRODUCTION_REVENUE", "UNVERIFIED_REVENUE", "SIMULATED_REVENUE"}
 
-PRODUCTION_SOURCES = {"awin_production", "impact_production"}   # nguồn production được duyệt REAL
+# Chỉ nguồn production ĐÃ ĐƯỢC CEO phê duyệt mới được is_real()==True.
+# Impact ("impact_production") CỐ Ý KHÔNG nằm ở đây cho đến khi CEO phê duyệt RIÊNG Impact LIVE.
+# => mọi record Impact (kể cả production-transport, verified) đều is_real()==False. Việc thêm
+#    "impact_production" vào đây là quyết định có kiểm soát của CEO/CTO, không phải mặc định.
+PRODUCTION_SOURCES = {"awin_production"}   # nguồn production được duyệt REAL (AWIN only, hiện tại)
 
 
 def provenance(source: str, source_record_id: str, data_state: str,
@@ -57,5 +61,21 @@ def click_type(data_state: str, network_reported: bool = False) -> str:
     return "SEEDED_CLICK"
 
 
-def conversion_type(data_state: str) -> str:
-    return "AWIN_PRODUCTION_CONVERSION" if data_state in ("LIVE", "PRODUCTION_VERIFIED") else "SEEDED_CONVERSION"
+# Nhãn conversion production theo ĐÚNG nguồn mạng, lấy từ provenance "source" (không suy từ data_state).
+_PRODUCTION_CONVERSION_BY_SOURCE = {
+    "awin_production": "AWIN_PRODUCTION_CONVERSION",
+    "impact_production": "IMPACT_PRODUCTION_CONVERSION",
+}
+
+
+def conversion_type(data_state: str, source: str = "") -> str:
+    """Phân loại conversion theo nguồn mạng. TEST/DRY_RUN/SEEDED → SEEDED_CONVERSION.
+
+    LIVE/PRODUCTION_VERIFIED → nhãn theo `source`: awin_production → AWIN_PRODUCTION_CONVERSION,
+    impact_production → IMPACT_PRODUCTION_CONVERSION. Một production state có source lạ/trống KHÔNG
+    được coi là AWIN — trả về SEEDED_CONVERSION, để không mạng mới nào bị gắn nhầm nhãn AWIN.
+    (Nhãn này chỉ cho biết NGUỒN/loại sự kiện; tư cách REAL do is_real() quyết định riêng.)
+    """
+    if data_state not in ("LIVE", "PRODUCTION_VERIFIED"):
+        return "SEEDED_CONVERSION"
+    return _PRODUCTION_CONVERSION_BY_SOURCE.get(source, "SEEDED_CONVERSION")
