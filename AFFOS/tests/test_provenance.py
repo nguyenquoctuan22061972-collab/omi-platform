@@ -29,7 +29,11 @@ class TestProvenance(unittest.TestCase):
         self.assertEqual(provenance.revenue_label("SEEDED"), "SIMULATED_REVENUE")
         self.assertEqual(provenance.revenue_label("PRODUCTION_VERIFIED"), "PRODUCTION_REVENUE")
         self.assertEqual(provenance.conversion_type("SEEDED"), "SEEDED_CONVERSION")
-        self.assertEqual(provenance.conversion_type("LIVE"), "AWIN_PRODUCTION_CONVERSION")
+        # source-aware: AWIN và Impact có nhãn riêng; production state không source → không là AWIN
+        self.assertEqual(provenance.conversion_type("LIVE", "awin_production"), "AWIN_PRODUCTION_CONVERSION")
+        self.assertEqual(provenance.conversion_type("PRODUCTION_VERIFIED", "impact_production"),
+                         "IMPACT_PRODUCTION_CONVERSION")
+        self.assertEqual(provenance.conversion_type("LIVE"), "SEEDED_CONVERSION")
 
     def test_sqlite_is_test_only(self):
         with self.assertRaises(ValueError):

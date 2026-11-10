@@ -68,7 +68,7 @@ def run(events: Optional[List[Dict]] = None, env: Optional[Dict] = None,
             cv = f"CV-{pid}-{j}"
             repo.insert("conversion_events", {"id": cv, "click_event_id": ce, "offer_id": offer,
                                               "order_value": ov, "status": "confirmed", "ts": _ts(),
-                                              "event_subtype": provenance.conversion_type(DS),
+                                              "event_subtype": provenance.conversion_type(DS, src),
                                               **provenance.provenance(src, cv, DS)})
             repo.insert("commissions", {"id": f"CO-{pid}-{j}", "conversion_event_id": cv,
                                         "amount": round(ov * rate, 2), "status": "confirmed",

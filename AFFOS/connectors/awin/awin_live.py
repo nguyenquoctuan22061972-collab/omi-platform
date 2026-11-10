@@ -167,7 +167,7 @@ class AwinLiveClient:
             repo.insert("conversion_events", {"id": cv, "click_event_id": ce,
                         "offer_id": "OF-" + str(t.get("advertiserId", "")),
                         "order_value": order_value, "status": status, "ts": t.get("transactionDate", ""),
-                        "event_subtype": provenance.conversion_type(self._state()),
+                        "event_subtype": provenance.conversion_type(self._state(), self._source()),
                         **self._prov(cv, currency=currency)})
             repo.insert("commissions", {"id": f"CO-{tid}", "conversion_event_id": cv,
                         "amount": comm_amount, "status": status,

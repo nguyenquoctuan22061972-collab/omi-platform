@@ -79,14 +79,18 @@ class TestImpactLive(unittest.TestCase):
         self.assertEqual(proof.real_commerce_proof(repo)["status"], "NOT YET VERIFIED")
         self.assertFalse(provenance.is_real(repo.query("SELECT * FROM commissions")[0]))
 
-    def test_impact_production_real_when_verified(self):
-        # CTO-approved whitelist: impact_production IS in PRODUCTION_SOURCES now, so a
-        # production-transport + verified record is_real()==True. Fake/TEST stays non-real.
+    def test_impact_production_never_real_until_ceo_approval(self):
+        # Impact LIVE CHƯA được CEO phê duyệt: impact_production KHÔNG nằm trong PRODUCTION_SOURCES,
+        # nên dù transport production + verified, is_real() vẫn False. data_state transport-truth
+        # vẫn là PRODUCTION_VERIFIED, nhưng tư cách REAL bị guard ở nguồn chặn lại.
+        self.assertNotIn("impact_production", provenance.PRODUCTION_SOURCES)
         c = ImpactLiveClient(CREDS, transport=ProductionTransport())
         self.assertEqual(c._state(), "PRODUCTION_VERIFIED")
         rec = c._prov("X-1", currency="USD")
-        self.assertTrue(provenance.is_real(rec))        # whitelisted production source
-        # fake/test transport must still never be real
+        self.assertEqual(rec["data_state"], "PRODUCTION_VERIFIED")
+        self.assertEqual(int(rec["is_verified"]), 1)
+        self.assertFalse(provenance.is_real(rec))        # KHÔNG real: nguồn chưa được duyệt
+        # fake/test transport cũng không bao giờ real
         f = ImpactLiveClient(CREDS, transport=FakeTransport())
         self.assertFalse(provenance.is_real(f._prov("X-2", currency="USD")))
 

@@ -214,7 +214,7 @@ class ImpactLiveClient:
             repo.insert("conversion_events", {"id": cv, "click_event_id": ce,
                         "offer_id": "OF-" + str(a.get("CampaignId", "")),
                         "order_value": amount, "status": status, "ts": a.get("EventDate", ""),
-                        "event_subtype": provenance.conversion_type(self._state()),
+                        "event_subtype": provenance.conversion_type(self._state(), self._source()),
                         **self._prov(cv, currency=currency)})
             repo.insert("commissions", {"id": f"CO-{aid}", "conversion_event_id": cv,
                         "amount": payout, "status": status,
