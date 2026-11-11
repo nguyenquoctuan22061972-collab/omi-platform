@@ -23,7 +23,7 @@ executes **after CEO approval**.
           │        └── migrations run as affos_owner (operator, one-off)        │
           └───────────────────────────────────────────────────────────────────┘
    Reverse proxy / LB (optional)  ──► affos-runtime: liveness /health, readiness /ready
-   n8n (separate deployment)      ──► attach to omi-staging to reach affos-runtime:8099 (no DB cred)
+   n8n (separate deployment)      ──► private network/proxy integration (separate task; no DB cred)
 ```
 - **Postgres and auth-rbac are never published to the host/public.** The runtime API binds only to
   `127.0.0.1:8099` on the host for local smoke tests; it is not bound to a public interface.
