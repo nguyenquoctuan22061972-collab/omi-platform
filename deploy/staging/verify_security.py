@@ -30,8 +30,13 @@ def verify_compose():
     import yaml
     d = yaml.safe_load(read(os.path.join(DEPLOY, "docker-compose.staging.yml")))
     svcs = d.get("services", {})
-    published = {s: v.get("ports") for s, v in svcs.items() if v.get("ports")}
-    check("no published host ports in staging compose", not published, str(published or "none"))
+    pg_ports = svcs.get("postgres", {}).get("ports") or []
+    auth_ports = svcs.get("auth-rbac", {}).get("ports") or []
+    runtime_ports = svcs.get("affos-runtime", {}).get("ports") or []
+    check("Postgres has no published host port", not pg_ports, str(pg_ports or "none"))
+    check("auth-rbac has no published host port", not auth_ports, str(auth_ports or "none"))
+    check("affos-runtime published on loopback only",
+          runtime_ports == ["127.0.0.1:8099:8099"], str(runtime_ports or "none"))
 
     affos = svcs.get("affos-runtime", {})
     dburl = (affos.get("environment", {}) or {}).get("DATABASE_URL", "")
