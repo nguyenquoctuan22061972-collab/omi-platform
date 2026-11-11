@@ -17,14 +17,16 @@ executes **after CEO approval**.
           VPS (staging host)  ── docker network: omi-staging (bridge, internal) ──
           ┌───────────────────────────────────────────────────────────────────┐
           │  postgres:16-alpine     auth-rbac:8081        affos-runtime:8099    │
-          │  (NO published port) ◄── DATABASE_URL ──────  (affos_service)       │
+          │  (NO host port)       ◄── DATABASE_URL ──────  (affos_service)       │
+          │                                               host loopback only     │
           │        ▲  volume ./staging-data/pg            volume ./staging-data/affos
           │        └── migrations run as affos_owner (operator, one-off)        │
           └───────────────────────────────────────────────────────────────────┘
    Reverse proxy / LB (optional)  ──► affos-runtime: liveness /health, readiness /ready
    n8n (separate deployment)      ──► attach to omi-staging to reach affos-runtime:8099 (no DB cred)
 ```
-- **Postgres is never published to the host/public** (compose has no `ports:` for it) — internal bridge only.
+- **Postgres and auth-rbac are never published to the host/public.** The runtime API binds only to
+  `127.0.0.1:8099` on the host for local smoke tests; it is not bound to a public interface.
 - Volumes `./staging-data/{pg,auth,affos}` hold staging data, independent of prod volumes.
 
 ## 3. Environment variables (names only — fill from the secret store; never commit)
