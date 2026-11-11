@@ -41,8 +41,9 @@ deploy/staging/migration_safety_rehearsal.sh # order/idempotency/duplicate-prech
 > They NEVER connect to staging/production and clean up after themselves.
 
 ## 3. Network / volume / isolation (host-level, operator checks)
-- `docker compose -f deploy/docker-compose.staging.yml ps` → Postgres has **no published host port** (internal
-  `omi-staging` bridge only). `.env.staging` is gitignored; secrets come from the secret store.
+- `docker compose -f deploy/docker-compose.staging.yml ps` → Postgres and auth-rbac have **no published host
+  ports**; `affos-runtime:8099` is bound to **127.0.0.1 only** so the host-side smoke script can reach it without
+  exposing the API publicly. `.env.staging` is gitignored; secrets come from the secret store.
 - Volumes `./staging-data/{pg,auth,affos}` are the staging DB/auth/runtime data, **independent of prod**.
 
 ## Mapping to Milestone-2 acceptance criteria
