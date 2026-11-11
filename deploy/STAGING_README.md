@@ -50,8 +50,9 @@ superuser runs `roles.sql` once. n8n never gets a DB credential.
   - `GET /ready` (and `/readyz`) = **readiness** — **probes Postgres**; **200** when reachable (or no DB
     configured = dry-run), **503** when a configured Postgres is unreachable. Use this for an external
     load-balancer / orchestrator readiness gate so writes stop routing during an outage.
-- n8n is a separate deployment; attach it to the `omi-staging` network (or make the network external)
-  so WF060 can reach `affos-runtime:8099`.
+- n8n network integration is **not configured by this standalone compose**. WF060 connectivity is a
+  separate integration task: explicitly provision/share a Docker network or a private reverse-proxy route,
+  then verify reachability without exposing Postgres or granting n8n database credentials.
 - Image build was not verified in CI here (no Docker daemon in the authoring session); `docker compose
   config` is valid and the `server.py` entrypoint was run directly (`/health` 200, unauth → 401).
 - AWIN live ingest / Impact production remain OFF — separate approval.
