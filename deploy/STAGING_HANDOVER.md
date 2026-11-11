@@ -9,7 +9,9 @@ paid provider call, no live affiliate path. Run the steps in order; record each 
 ## 1. Infrastructure prerequisites
 - 1× VPS (min 2 vCPU / 4 GB / 40 GB SSD), Linux, **separate from production**.
 - Docker Engine + Compose v2; **PostgreSQL 16** (via `postgres:16-alpine` in the compose).
-- No inbound ports for Postgres (compose publishes none). Outbound egress not needed for dry-run.
+- Postgres and auth-rbac have no published host ports. The runtime API is published only on host loopback
+  `127.0.0.1:8099` for local smoke checks; it is not exposed on a public interface. Outbound egress is not
+  needed for dry-run.
 - Full sizing + indicative cost ranges: `deploy/STAGING_PLAN.md`.
 
 ## 2. Environment variables
