@@ -63,6 +63,9 @@ services:
       # SELECT elsewhere; NO DDL, NO BYPASSRLS). This is also the durable approvals/idempotency/audit
       # store (0004/0005 tables) — NOT SQLite. Migrations run separately as affos_owner.
       DATABASE_URL: postgresql://affos_service:${AFFOS_PG_SERVICE_PASSWORD}@postgres:5432/${AFFOS_PG_DB}
+    # Host-side smoke tests use localhost only; never expose the runtime on a public interface.
+    ports:
+      - "127.0.0.1:8099:8099"
     volumes:
       - ./staging-data/affos:/data
     # Container healthcheck = LIVENESS (/health): process up, no DB touch — a transient Postgres blip must
