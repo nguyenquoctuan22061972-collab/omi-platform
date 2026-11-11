@@ -54,6 +54,51 @@ class TestConsole(unittest.TestCase):
         self.assertEqual(s["live_probe"], "requires_vps")
         self.assertIn("crm-core", s["expected_services"])
 
+    # ---- command path wiring (execute → orchestrator → result store → receiver) ----
+    def test_execute_build_runs_real_path_not_plan(self):
+        c = Console({})
+        code, d = c.route("POST", "/build", {}, {"target": "WF005", "execute": True})
+        self.assertEqual(code, 200)
+        self.assertEqual(d["mode"], "execute")        # NOT a plan
+        self.assertEqual(d["status"], "SUCCEEDED")
+        self.assertTrue(d["correlation_id"].startswith("cor_"))
+        self.assertTrue(d["task_id"].startswith("AFFOS-EXEC-"))
+
+    def test_end_to_end_via_real_entry_point(self):
+        # one command through the real Console entry point, enqueued, worked, persisted,
+        # then read back by the SAME correlation_id — no hand-wired harness.
+        c = Console({})
+        _, sub = c.route("POST", "/fix", {}, {"target": "WF007", "execute": True})
+        cid = sub["correlation_id"]
+        code, res = c.route("GET", "/result/" + cid, {})
+        self.assertEqual(code, 200)
+        self.assertEqual(res["correlation_id"], cid)       # same id round-trips
+        self.assertEqual(res["status"], "SUCCEEDED")
+        self.assertEqual(res["target"], "WF007")
+        self.assertEqual(res["result"]["command"], "fix")
+
+    def test_deploy_never_executes(self):
+        c = Console({})
+        _, d = c.route("POST", "/deploy", {}, {"target": "x", "execute": True})
+        self.assertEqual(d["mode"], "plan")               # deploy stays plan-only
+        self.assertIn("PR-002", d["requires_permission"])
+
+    def test_result_unknown_correlation_id_404(self):
+        code, d = Console({}).route("GET", "/result/cor_does_not_exist", {})
+        self.assertEqual(code, 404)
+        self.assertFalse(d["ok"])
+
+    def test_result_requires_auth_when_token_set(self):
+        c = Console({"CONSOLE_TOKEN": "sekret"})
+        _, sub = c.route("POST", "/build", {"X-Console-Token": "sekret"},
+                         {"target": "WF009", "execute": True})
+        cid = sub["correlation_id"]
+        code_no, _ = c.route("GET", "/result/" + cid, {})                       # no token
+        self.assertEqual(code_no, 401)
+        code_ok, res = c.route("GET", "/result/" + cid, {"X-Console-Token": "sekret"})
+        self.assertEqual(code_ok, 200)
+        self.assertEqual(res["status"], "SUCCEEDED")
+
 
 if __name__ == "__main__":
     unittest.main()
