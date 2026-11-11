@@ -1,0 +1,40 @@
+name: Gemini connectivity
+
+# Kiểm tra an toàn, không tốn phí: secret GEMINI_API_KEY có tồn tại không và
+# GeminiAdapter (libs/integrations/gemini.py) gọi được Gemini API.
+# Chỉ gọi models.list (không sinh nội dung). Khóa gửi qua header, không in ra log.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/gemini-connectivity.yml
+      - libs/integrations/gemini.py
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Secret GEMINI_API_KEY có được thiết lập
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::FAIL — secret GEMINI_API_KEY chưa được thiết lập (hoặc rỗng)"
+            exit 1
+          fi
+          echo "PASS — secret GEMINI_API_KEY tồn tại (độ dài ${#GEMINI_API_KEY} ký tự)"
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: GeminiAdapter.live_check (models.list, miễn phí)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+        run: python -c "from libs.integrations.gemini import main; raise SystemExit(main())"

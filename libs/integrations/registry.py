@@ -10,6 +10,7 @@ from .zalo_oa import ZaloOaAdapter
 from .facebook_messenger import FacebookMessengerAdapter
 from .openai import OpenAiAdapter
 from .vertex_ai import VertexAiAdapter
+from .gemini import GeminiAdapter
 
 ADAPTERS: Dict[str, Type[Adapter]] = {
     cls.name: cls
@@ -20,6 +21,7 @@ ADAPTERS: Dict[str, Type[Adapter]] = {
         FacebookMessengerAdapter,
         OpenAiAdapter,
         VertexAiAdapter,
+        GeminiAdapter,
     )
 }
 

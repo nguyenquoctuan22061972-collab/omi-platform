@@ -1,0 +1,145 @@
+{
+  "slug": "HeartRise_EP01",
+  "channel": "HeartRise Stories",
+  "title": "She Gave Her Last $20 to a Stranger in the Rain — The Next Morning, He Was at Her Door",
+  "format": "16:9 1080p, ~3 min",
+  "voice": "vo.mp3",
+  "voice_id": "lXiPxoDwq0d2OK7NdaXw",
+  "words": "words.json",
+  "images_dir": "img",
+  "characters": {
+    "Mia": "young woman, 24, slim, dark brown hair, bright yellow rain jacket over a grey hoodie, square food-delivery backpack",
+    "Walter": "frail elderly man, 80, neat white hair, short white beard, round wire glasses, grey knit cardigan",
+    "Leo": "boy, 12, messy dark hair, school sweater"
+  },
+  "scenes": [
+    {
+      "start": 0.0,
+      "image": "s01",
+      "prompt": "Mia rides a scooter through a rainy city street at midnight"
+    },
+    {
+      "start": 4.0,
+      "image": "s02",
+      "prompt": "close-up: Mia's wet hands hold a crumpled twenty-dollar bill"
+    },
+    {
+      "start": 17.48,
+      "video": "broll/rain_street.mp4",
+      "note": "city at night — she works nights"
+    },
+    {
+      "start": 24.0,
+      "video": "broll/flooded_car.mp4",
+      "note": "night traffic in the rain"
+    },
+    {
+      "start": 30.24,
+      "video": "broll/raindrops_road.mp4",
+      "note": "order cancelled, soaked"
+    },
+    {
+      "start": 38.36,
+      "image": "s05",
+      "prompt": "crop of s06: Walter alone on the bench"
+    },
+    {
+      "start": 49.44,
+      "image": "s06",
+      "prompt": "Mia kneels in front of Walter (character anchor)"
+    },
+    {
+      "start": 51.04,
+      "image": "s07",
+      "prompt": "crop of s06: close-up of Walter"
+    },
+    {
+      "start": 63.92,
+      "image": "s02",
+      "prompt": "Mia looks at the twenty dollars"
+    },
+    {
+      "start": 72.76,
+      "image": "s09",
+      "prompt": "Mia wraps her yellow jacket around Walter, taxi headlights"
+    },
+    {
+      "start": 82.32,
+      "image": "s06",
+      "prompt": "he held her hand tightly"
+    },
+    {
+      "start": 88.68,
+      "video": "broll/taxi_rain.mp4",
+      "offset": 20.0,
+      "note": "taxi disappears into the rain"
+    },
+    {
+      "start": 91.68,
+      "image": "s01",
+      "prompt": "Mia rides home in the rain"
+    },
+    {
+      "start": 100.24,
+      "video": "broll/knock.mp4",
+      "note": "knock at the door"
+    },
+    {
+      "start": 104.4,
+      "image": "s09",
+      "prompt": "memory: her jacket"
+    },
+    {
+      "start": 109.44,
+      "video": "broll/hands_couple.mp4",
+      "offset": 7.0,
+      "note": "held my wife's hand"
+    },
+    {
+      "start": 115.44,
+      "video": "broll/photos_old.mp4",
+      "note": "old envelope / box of memories"
+    },
+    {
+      "start": 124.48,
+      "video": "broll/photos_look.mp4",
+      "note": "faded photograph of a little boy"
+    },
+    {
+      "start": 134.84,
+      "image": "s07",
+      "prompt": "Walter tells the story"
+    },
+    {
+      "start": 146.0,
+      "video": "broll/photos_old.mp4",
+      "offset": 4.0,
+      "note": "letters every Christmas"
+    },
+    {
+      "start": 153.68,
+      "image": "s05",
+      "prompt": "his daughter did"
+    },
+    {
+      "start": 156.0,
+      "image": "s09",
+      "prompt": "kindness returns — the yellow jacket"
+    },
+    {
+      "start": 165.92,
+      "image": "s06",
+      "prompt": "Mia and Walter — kindness came home"
+    },
+    {
+      "start": 173.2,
+      "video": "broll/sunrise2.mp4",
+      "offset": 30.0,
+      "note": "sunrise after the rain (outro)"
+    }
+  ],
+  "end_card": "Subscribe · HeartRise Stories",
+  "credits": [
+    "Stock footage: Pexels (pexels.com) — clips 12570193, 9481660, 9253241, 855432, 6785814, 6657871, 4230107, 7545824, 5809540"
+  ]
+}
