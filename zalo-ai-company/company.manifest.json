@@ -162,5 +162,13 @@
     "api": "zalo-ai-company/ceo-console/src/console_api.py",
     "status": "built_offline",
     "live_needs": "PR-002"
+  },
+  "revenue_plane": {
+    "status": "design-approved",
+    "adr": "ADR-0004",
+    "note": "Metadata only — NOT a department; not read or validated by command_center. Does not modify 'departments'. Per PA A (ADR-0004).",
+    "runtime_binding": "AFFOS/runtime",
+    "implemented": true,
+    "live_needs": "migrations 0004/0005 + secrets + staging host (BLOCKED, CEO)"
   }
 }

@@ -20,6 +20,12 @@ omi-platform/
 └── workflows/tests/    validator
 ```
 
+### 1b. AFFOS Revenue Plane — top-level (PA A · ADR-0004)
+`AFFOS/` được **chính thức công nhận** là một plane top-level hợp lệ (ngoại lệ có chủ đích của mục 1),
+theo quyết định CEO PA A (ADR-0004). Cấu trúc: `AFFOS/{core,runtime,connectors,agents,ops,skills,tests,constitution}/`.
+Lý do: bảo toàn các PR đang mở trên `AFFOS/` (không di dời code); hợp thức hoá Revenue Plane hiện có.
+Mã mới thuộc Revenue Plane đặt dưới `AFFOS/`; các app/service khác vẫn theo `apps/<module>/` (mục 1).
+
 ## 2. Naming
 | Đối tượng | Quy ước | Ví dụ |
 |---|---|---|
