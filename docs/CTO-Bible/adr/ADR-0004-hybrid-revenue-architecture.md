@@ -12,7 +12,7 @@ Repo có hai mặt phẳng song song cho doanh thu (xem reconciliation Phase 1�
   `orchestrator/runtime` (queue/worker), `zalo-ai-company/ceo-console`. Được quản trị bởi PRD-001..012,
   `capability-map.md`, `naming-and-structure.md`, `affos.manifest.json`.
 - **AFFOS Revenue Plane** — `AFFOS/` (core/, runtime/, connectors/): revenue API + approval + provenance +
-  cost-ledger + durable store. Chín về vận hành nhưng trước ADR này **không** có trong tài liệu quản trị.
+  cost-ledger + durable store. Đã có một số thành phần nghiệp vụ và mã nguồn trong repository, nhưng mức độ hoàn thiện, tích hợp và sẵn sàng vận hành thực tế chưa được nghiệm thu đầy đủ.
 
 Quyết định kiến trúc: **Hybrid Option C** — giữ AFFOS làm revenue-domain service; Platform Plane sở hữu
 Auth-RBAC, CEO Console, Hub/Queue, Worker, Runtime Health. Hợp thức hoá AFFOS qua ADR + manifest metadata
