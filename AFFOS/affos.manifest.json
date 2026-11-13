@@ -30,5 +30,30 @@
     "infrastructure/docker": "deploy",
     "infrastructure/backup": "deploy/backup",
     "infrastructure/monitoring": "apps/runtime-health"
+  },
+  "revenue_plane": {
+    "status": "design-approved",
+    "adr": "ADR-0004",
+    "note": "Metadata only — NOT read by Command Center or runtime. Does not modify 'modules'. Declares the AFFOS Revenue Plane per PA A (ADR-0004).",
+    "runtime": "AFFOS/runtime",
+    "implemented": {
+      "revenue_api": "AFFOS/runtime/revenue_api.py",
+      "revenue_store": "AFFOS/runtime/revenue_store.py",
+      "cost_ledger": "AFFOS/runtime/cost_ledger.py",
+      "provenance": "AFFOS/core/provenance.py",
+      "attribution": "AFFOS/core/attribution/attribution.py",
+      "proof": "AFFOS/core/proof.py",
+      "connectors_awin": "AFFOS/connectors/awin",
+      "connectors_impact": "AFFOS/connectors/impact"
+    },
+    "planned": [
+      "outbox_table (D1)",
+      "dispatcher (D7)",
+      "dedicated_service_issuer (D2/D6)",
+      "revenue_ingest_service_role (D2)",
+      "distributed_rate_limit (D4)",
+      "approval_id_claim_lease (D3)",
+      "reconciliation_ambiguous (D5/D8)"
+    ]
   }
 }
