@@ -24,12 +24,33 @@ Auth-RBAC, CEO Console, Hub/Queue, Worker, Runtime Health. Hợp thức hoá AFF
 |---|---|---|
 | **D1** | Revenue delivery = **Outbox table trên AFFOS Postgres**; at-least-once + Idempotency-Key dedup. | **[P]** chưa có bảng/dispatcher |
 | **D2** | Worker = **service principal chỉ `revenue:ingest`** (không read/approve/revoke). | **[P]** role chưa tồn tại |
-| **D3** | Approval **bind `approval_id` + claim/lease**; revoke re-check atomic trước side-effect. | **[P]** hiện `is_approved` boolean (`AFFOS/runtime/revenue_api.py` `is_approved`) |
+| **D3** | Approval binding: `approval_id` gắn với `execution_id`; lease/fencing/version; re-check revocation **ngay trước provider authorization gate**. KHÔNG giữ DB lock qua provider network call. | **[P]** hiện `is_approved` boolean (`AFFOS/runtime/revenue_api.py` `is_approved`) |
 | **D4** | **Distributed rate-limit bắt buộc trước LIVE** (hiện process-local). | **[P]** (`revenue_api.py` `_rate_limited`) |
-| **D5** | **Reconciliation bảo vệ external side-effect** — read-only, không auto-sửa. | **[V]** `AFFOS/runtime/revenue_report.py` `reconcile` |
+| **D5** | **Reconciliation bảo vệ external side-effect** — read-only, manual-first, không auto-sửa. | **[V]** chỉ read-only/manual (`AFFOS/runtime/revenue_report.py` `reconcile`); AMBIGUOUS + xử lý outcome bất định = **[P]** |
 | **D6** | **Separate HS256 service signing key** (`AFFOS_SERVICE_JWT_SECRET`), độc lập user `AUTH_SECRET`. | **[P]** hiện 1 key |
 | **D7** | **Dispatcher chạy trong `affos-runtime`**, module riêng + DB permission riêng (`affos_service`, RLS). | **[P]** module chưa có; RLS affos_service **[V]** `AFFOS/core/schema/0005_ingest_store_policies.sql` |
 | **D8** | **Manual-first reconciliation** — người xác nhận trước khi bất kỳ hành động tự động. | **[V]** reconcile hiện manual/read-only |
+
+### D3 — Approval semantics (clarification, CTO review C1)
+
+Thiết kế [P] phải bảo toàn, và KHÔNG được phát biểu quá mức:
+- `approval_id` **bound to `execution_id`** (mỗi lần thực thi gắn đúng một approval).
+- **Lease / fencing / version** semantics để chống thực thi cũ/đồng thời.
+- **KHÔNG giữ database lock qua provider network call** (lock chỉ trong tx cục bộ, nhả trước khi gọi mạng).
+- **Re-check revocation ngay trước provider authorization gate** (điểm quyết định cuối trước side-effect).
+- Một khi external side-effect đã bắt đầu, **KHÔNG đảm bảo huỷ (cancellation) được**.
+- **Không tuyên bố** atomic cancellation của external side-effect; an toàn dựa trên dedup (Idempotency-Key)
+  + reconciliation, không phải rollback mạng.
+
+### D5 — Reconciliation maturity (clarification, CTO review C2)
+
+- **Verified [V]** chỉ trong phạm vi code hiện có: reconciliation **read-only, manual-first** không mutate
+  source records (`revenue_report.py` `reconcile`; bucket qua `money_status`).
+- **Planned [P]:** trạng thái **AMBIGUOUS** và xử lý an toàn các provider-outcome bất định — chưa triển khai,
+  chưa verify độc lập.
+- **Manual-first** được giữ nguyên (D8): người xác nhận trước mọi hành động tự động.
+- **Không tuyên bố exactly-once external delivery.** Outbox (D1) chỉ cung cấp at-least-once; dedup là
+  Idempotency-Key; reconciliation là lớp phát hiện lệch, không phải bảo đảm giao nhận.
 
 ## Classification of the Revenue Plane
 

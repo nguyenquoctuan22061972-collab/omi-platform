@@ -168,7 +168,11 @@
     "adr": "ADR-0004",
     "note": "Metadata only — NOT a department; not read or validated by command_center. Does not modify 'departments'. Per PA A (ADR-0004).",
     "runtime_binding": "AFFOS/runtime",
-    "implemented": true,
+    "implementation": "partial",
+    "capabilities": {
+      "verified_partial": ["revenue_api", "durable_approval_idempotency", "cost_ledger", "provenance_proof_attribution", "reconciliation_read_only_manual"],
+      "planned": ["outbox_dispatcher", "dedicated_service_issuer", "revenue_ingest_service_role", "distributed_rate_limit", "approval_id_lease", "reconciliation_ambiguous"]
+    },
     "live_needs": "migrations 0004/0005 + secrets + staging host (BLOCKED, CEO)"
   }
 }
