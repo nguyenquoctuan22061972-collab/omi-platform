@@ -345,13 +345,15 @@ class VideoRenderer:
         base = ["-i", video, "-i", music_wav, "-i", narration_wav]
         tail = ["-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac",
                 "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_mp4]
+        # apad cuối chuỗi: đệm im lặng để audio >= video, nhờ -shortest video (dài hơn
+        # giọng) không bị cắt mất cảnh outro.
         if duck:
             fc = (
                 "[1:a]volume=0.85[mv];"
                 "[mv][2:a]sidechaincompress=threshold=0.05:ratio=8:attack=20:"
                 "release=500[duck];"
                 "[duck][2:a]amix=inputs=2:duration=first:dropout_transition=0:"
-                "normalize=0[a]"
+                "normalize=0[mx];[mx]apad[a]"
             )
             try:
                 self._run([*base, "-filter_complex", fc, *tail])
@@ -359,7 +361,8 @@ class VideoRenderer:
             except Exception:
                 pass
         fc = ("[1:a]volume=0.30[m];"
-              "[m][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
+              "[m][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mx];"
+              "[mx]apad[a]")
         self._run([*base, "-filter_complex", fc, *tail])
         return False
 
