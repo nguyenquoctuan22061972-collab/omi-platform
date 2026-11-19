@@ -76,6 +76,10 @@ jobs:
         working-directory: apps/content-factory/episodes/heartrise_ep01
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Test — Episode factory (PRD-009 E)
+        working-directory: apps/content-factory/episodes
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Test — Prompt Registry (PRD-009 B)
         working-directory: libs/prompts
         run: python -m unittest discover -s tests -p 'test_*.py' -v
