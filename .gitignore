@@ -15,6 +15,7 @@ apps/dashboard/config.js
 # Video build artifacts (MP4 + downloaded stock assets + ffmpeg scratch)
 apps/content-factory/episodes/*/build/
 apps/content-factory/episodes/build/
+apps/content-factory/episodes/_narration/
 libs/video/tests/_scratch/
 *.mp4
 *.wav
