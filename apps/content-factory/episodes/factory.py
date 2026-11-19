@@ -86,8 +86,10 @@ def _scene_plan(req: EpisodeRequest, channel) -> List[tuple]:
         title = req.title or sb.TITLE
         return plan, title, sb.YT_TITLE, sb.YT_DESCRIPTION, sb.YT_TAGS
 
-    title = req.title or f"{channel.niche} — Khởi đầu"
-    beats = _script.generate(channel.brand, channel.niche, req.episode_no, title)
+    beats = _script.generate(channel.brand, channel.niche, req.episode_no, req.title)
+    # tiêu đề tập: ưu tiên req.title, else lấy từ cảnh intro (bỏ xuống dòng/trang trí)
+    intro_title = beats[0].title.replace("\n", " ").strip().strip("“”\"").strip()
+    title = req.title or intro_title or f"{channel.niche} — Khởi đầu"
     # thời lượng mỗi cảnh theo kind
     dur = {"intro": 7.0, "quote": 9.0, "outro": 8.0}
     plan = []
