@@ -57,6 +57,17 @@ class TestCompose(unittest.TestCase):
             # ảnh không được toàn đen (có chữ + nền)
             self.assertGreater(len(im.convert("L").getcolors(maxcolors=100000) or []), 5)
 
+    def test_make_thumbnail(self):
+        png = os.path.join(_SCRATCH, "thumb.png")
+        sc = Scene(image_path="", duration=5, title="Tiêu đề thử",
+                   subtitle="phụ đề", kraft="Tập 01", kind="story")
+        out = self.r.make_thumbnail(sc, png, size=(640, 360))
+        self.assertTrue(os.path.exists(out))
+        with Image.open(out) as im:
+            self.assertEqual(im.size, (640, 360))
+        # renderer giữ nguyên kích thước gốc sau khi dựng thumbnail
+        self.assertEqual((self.r.width, self.r.height), (640, 360))
+
     def test_music_bed_wav_duration(self):
         import wave
         wav = os.path.join(_SCRATCH, "m.wav")

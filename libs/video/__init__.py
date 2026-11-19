@@ -16,7 +16,17 @@ from .sources import (
     download_first,
     AssetUnavailable,
 )
-from .renderer import Scene, VideoRenderer, ffmpeg_available
+from .renderer import Scene, VideoRenderer, ffmpeg_available, xfade_offsets
+from .channels import Channel, CHANNELS, get_channel, list_keys
+from .narration import (
+    NarrationSpec,
+    NarrationProvider,
+    SilentNarration,
+    FileNarration,
+    ElevenLabsNarration,
+    from_env as narration_from_env,
+)
+from .subtitles import srt_from_scenes, write_srt, scene_windows
 
 __all__ = [
     "AssetSource",
@@ -29,4 +39,18 @@ __all__ = [
     "Scene",
     "VideoRenderer",
     "ffmpeg_available",
+    "xfade_offsets",
+    "Channel",
+    "CHANNELS",
+    "get_channel",
+    "list_keys",
+    "NarrationSpec",
+    "NarrationProvider",
+    "SilentNarration",
+    "FileNarration",
+    "ElevenLabsNarration",
+    "narration_from_env",
+    "srt_from_scenes",
+    "write_srt",
+    "scene_windows",
 ]

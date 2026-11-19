@@ -337,6 +337,49 @@ class VideoRenderer:
             "-shortest", "-movflags", "+faststart", out_mp4,
         ])
 
+    def _mux_tracks(self, video: str, music_wav: str, narration_wav: str,
+                    out_mp4: str, duck: bool = True) -> bool:
+        """Trộn nhạc nền + lồng tiếng lên video. duck=True: ép nhạc nhỏ lại dưới giọng
+        (sidechaincompress); nếu lỗi thì fallback trộn đơn giản (nhạc nhỏ cố định).
+        Trả về True nếu dùng được ducking."""
+        base = ["-i", video, "-i", music_wav, "-i", narration_wav]
+        tail = ["-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac",
+                "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_mp4]
+        if duck:
+            fc = (
+                "[1:a]volume=0.85[mv];"
+                "[mv][2:a]sidechaincompress=threshold=0.05:ratio=8:attack=20:"
+                "release=500[duck];"
+                "[duck][2:a]amix=inputs=2:duration=first:dropout_transition=0:"
+                "normalize=0[a]"
+            )
+            try:
+                self._run([*base, "-filter_complex", fc, *tail])
+                return True
+            except Exception:
+                pass
+        fc = ("[1:a]volume=0.30[m];"
+              "[m][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
+        self._run([*base, "-filter_complex", fc, *tail])
+        return False
+
+    def make_thumbnail(self, scene: "Scene", out_png: str,
+                       size: Tuple[int, int] = (1280, 720)) -> str:
+        """Dựng thumbnail riêng (mặc định 1280x720) từ một cảnh, chữ to kiểu intro."""
+        ow, oh = self.width, self.height
+        self.width, self.height = size
+        try:
+            thumb = Scene(
+                image_path=scene.image_path, duration=1.0,
+                title=scene.title, subtitle=scene.subtitle,
+                kraft=scene.kraft, kind="intro",
+                zoom=scene.zoom, align="center",
+            )
+            self.compose_scene(thumb, out_png)
+        finally:
+            self.width, self.height = ow, oh
+        return out_png
+
     def probe(self, path: str) -> dict:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries",
@@ -352,7 +395,8 @@ class VideoRenderer:
         return info
 
     def render(self, scenes: Sequence[Scene], out_mp4: str,
-               music: bool = True) -> dict:
+               music: bool = True, narration_wav: Optional[str] = None,
+               duck: bool = True) -> dict:
         if not ffmpeg_available():
             raise RuntimeError("ffmpeg/ffprobe không có sẵn")
         if not scenes:
@@ -383,7 +427,16 @@ class VideoRenderer:
         total = self.probe(silent).get("duration")
         total = float(total) if total else sum(durations)
 
-        if music:
+        ducked = False
+        has_voice = bool(narration_wav and os.path.exists(narration_wav))
+        if has_voice and music:
+            wav = os.path.join(self.workdir, "_music.wav")
+            self.music_bed(total, wav)
+            ducked = self._mux_tracks(silent, wav, narration_wav, out_mp4, duck=duck)
+        elif has_voice:
+            # chỉ lồng tiếng, không nhạc nền
+            self._mux_audio(silent, narration_wav, out_mp4)
+        elif music:
             wav = os.path.join(self.workdir, "_music.wav")
             self.music_bed(total, wav)
             self._mux_audio(silent, wav, out_mp4)
@@ -396,6 +449,8 @@ class VideoRenderer:
             "scenes": len(scenes),
             "crossfade": used_xfade,
             "music": music,
+            "narration": has_voice,
+            "ducking": ducked,
             "duration": info.get("duration"),
             "size": info.get("size"),
             "probe": info,
